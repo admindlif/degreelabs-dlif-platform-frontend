@@ -29,4 +29,5 @@ a single Worker and does not require a separately deployed cache Worker.
 - Build Command: `npm run build:vinext`
 - Deploy Command: `npm run deploy:vinext -- --skip-build`
 
-The Admin Portal uses the separate `degreelabs-dlif-platform-admin` Worker.
+The Admin Portal uses the separate
+`degreelabs-dlif-platform-frontend-admin` Worker.
