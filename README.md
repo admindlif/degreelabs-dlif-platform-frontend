@@ -14,15 +14,16 @@ Both applications require the public build-time environment variable:
 NEXT_PUBLIC_API_URL=https://your-api-domain.example
 ```
 
-## Render configuration
-
-### Fellow Portal
+## Fellow Portal on Cloudflare Workers
 
 - Root Directory: `apps/student-web`
-- Build Command: `npm ci && npm run build`
-- Start Command: `npx next start --port $PORT`
+- Build Command: `npm run build:vinext`
+- Deploy Command: `npm run deploy:vinext -- --skip-build`
 
-### Admin Portal
+The Worker name is defined in `cloudflare.config.ts`. The Fellow Portal uses
+a single Worker and does not require a separately deployed cache Worker.
+
+## Admin Portal on Render
 
 - Root Directory: `apps/admin-web`
 - Build Command: `npm ci && npm run build`
