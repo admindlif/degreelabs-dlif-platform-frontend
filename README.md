@@ -23,11 +23,10 @@ NEXT_PUBLIC_API_URL=https://your-api-domain.example
 The Worker name is defined in `cloudflare.config.ts`. The Fellow Portal uses
 a single Worker and does not require a separately deployed cache Worker.
 
-## Admin Portal on Render
+## Admin Portal on Cloudflare Workers
 
 - Root Directory: `apps/admin-web`
-- Build Command: `npm ci && npm run build`
-- Start Command: `npx next start --port $PORT`
+- Build Command: `npm run build:vinext`
+- Deploy Command: `npm run deploy:vinext -- --skip-build`
 
-The root Dockerfiles are available when deploying either application with
-Render's Docker runtime.
+The Admin Portal uses the separate `degreelabs-dlif-platform-admin` Worker.
