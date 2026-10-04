@@ -65,7 +65,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setError(
           responseDetail(data) ??
-            "Unable to verify your Fellow Portal session. Please try again."
+          "Unable to verify your Fellow Portal session. Please try again."
         );
         return false;
       }
@@ -96,13 +96,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     async function initializeSession() {
+      // Activation uses the onboarding cookie, not the authenticated session.
+      // Do not call /auth/me until activation is complete.
+      if (pathname.startsWith("/activate")) {
+        setLoading(false);
+        return;
+      }
+
       await Promise.resolve();
       await refreshUser();
     }
 
     void initializeSession();
-  }, [refreshUser]);
-
+  }, [pathname, refreshUser]);
   const logout = React.useCallback(async (): Promise<void> => {
     setError(null);
 
