@@ -15,7 +15,7 @@ export const responseStoreServiceBinding = responseStore.serviceBindingWorker;
 export default defineConfig({
   worker: defineWorker({
     ...responseStore.applicationWorker,
-    name: "student-web",
+    name: "degreelabs-dlif-platform-frontend",
     entrypoint: "vinext/server/fetch-handler",
     compatibilityDate: "2026-10-02",
     compatibilityFlags: ["nodejs_compat"],
