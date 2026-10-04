@@ -285,6 +285,7 @@ export function Sidebar({
 
   const [weeks, setWeeks] = React.useState<DiscoverWeek[]>([]);
   const [teamName, setTeamName] = React.useState<string | null>(null);
+  const [logoutError, setLogoutError] = React.useState<string | null>(null);
   const [manuallyExpanded, setManuallyExpanded] = React.useState<Set<string>>(
     () => new Set()
   );
@@ -392,6 +393,15 @@ export function Sidebar({
     },
     [automaticSectionKey, isSectionExpanded, pathname]
   );
+
+  const handleLogout = React.useCallback(async () => {
+    setLogoutError(null);
+    try {
+      await logout();
+    } catch {
+      setLogoutError("Unable to sign out. Please try again.");
+    }
+  }, [logout]);
 
   const navigationGroups: Array<{
     title: string;
@@ -675,6 +685,14 @@ export function Sidebar({
 
       {/* Cohort & User Footer Info */}
       <div className="shrink-0 border-t border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3">
+        {logoutError && (
+          <p
+            role="alert"
+            className="mb-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] font-semibold text-red-700"
+          >
+            {logoutError}
+          </p>
+        )}
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2">
             <span className="w-2 h-2 shrink-0 rounded-full bg-[var(--color-success)]" />
@@ -705,7 +723,7 @@ export function Sidebar({
           </div>
           <button
             type="button"
-            onClick={logout}
+            onClick={() => void handleLogout()}
             aria-label="Log out"
             className="text-[var(--color-text-muted)] hover:text-[var(--color-brand-orange)] p-1.5 rounded-lg hover:bg-[var(--color-bg-subtle)] transition-colors shrink-0"
             title="Log out"

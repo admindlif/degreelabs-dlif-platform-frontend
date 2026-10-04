@@ -7,15 +7,37 @@ import { useAuth } from "@/lib/auth-context";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function responseDetail(data: unknown): string | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "detail" in data &&
+    typeof data.detail === "string"
+  ) {
+    return data.detail;
+  }
+  return null;
+}
+
+function requiresTwoFactor(data: unknown): boolean | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "requires_2fa" in data &&
+    typeof data.requires_2fa === "boolean"
+  ) {
+    return data.requires_2fa;
+  }
+  return null;
+}
+
 export default function AdminLoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
 
   const [stage, setStage] = React.useState<1 | 2>(1);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [challengeToken, setChallengeToken] = React.useState("");
-
   const [code, setCode] = React.useState("");
   const [isRecoveryCode, setIsRecoveryCode] = React.useState(false);
 
@@ -30,19 +52,22 @@ export default function AdminLoginPage() {
     try {
       const res = await fetch(`${API_URL}/api/v1/auth/login`, {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(data.detail || "Invalid administrative credentials.");
+        setError(responseDetail(data) ?? "Invalid administrative credentials.");
         return;
       }
 
-      if (data.access_token) {
-        const success = await login(data.access_token);
+      const needsTwoFactor = requiresTwoFactor(data);
+      if (needsTwoFactor === false) {
+        const success = await refreshUser();
         if (success) {
           router.push("/");
           return;
@@ -52,14 +77,13 @@ export default function AdminLoginPage() {
         }
       }
 
-      if (data.requires_2fa && data.challenge_token) {
-        setChallengeToken(data.challenge_token);
+      if (needsTwoFactor === true) {
         setStage(2);
       } else {
         setError("Unexpected response from authentication service.");
       }
     } catch {
-      setError("Unable to connect to Admin API (port 8002). Please verify service is running.");
+      setError("Unable to connect to the Admin API. Please verify the service is running.");
     } finally {
       setLoading(false);
     }
@@ -73,29 +97,40 @@ export default function AdminLoginPage() {
     try {
       const res = await fetch(`${API_URL}/api/v1/auth/2fa/verify`, {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          challenge_token: challengeToken,
-          code: code.trim(),
-        }),
+        body: JSON.stringify({ code: code.trim() }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(data.detail || "Invalid verification code.");
+        const detail = responseDetail(data);
+        const challengeExpired =
+          res.status === 401 &&
+          detail !== null &&
+          (detail.toLowerCase().includes("challenge") ||
+            detail.toLowerCase().includes("expired"));
+
+        if (challengeExpired) {
+          setStage(1);
+          setCode("");
+          setError("Your 2FA session has expired. Please sign in again.");
+          return;
+        }
+
+        setError(detail ?? "Invalid verification code.");
         return;
       }
 
-      if (data.access_token) {
-        const success = await login(data.access_token);
-        if (success) {
-          router.push("/");
-        } else {
-          setError("Access Denied: Your account does not have Administrator privileges.");
-          setStage(1);
-          setCode("");
-        }
+      const success = await refreshUser();
+      if (success) {
+        router.push("/");
+      } else {
+        setError("Access Denied: Your account does not have Administrator privileges.");
+        setStage(1);
+        setCode("");
       }
     } catch {
       setError("Unable to complete 2FA verification. Please try again.");
@@ -270,7 +305,7 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
-          DLIF Platform • Port 3002 • Admin Operations Runtime :8002
+          DLIF Platform • Port 3002 • Admin Operations Portal
         </div>
       </div>
     </div>

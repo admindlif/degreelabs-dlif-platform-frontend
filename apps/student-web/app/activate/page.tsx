@@ -18,7 +18,30 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api/config";
 
-const ONBOARDING_RESUME_KEY = "dlif_onboarding_resume";
+function responseDetail(data: unknown): string | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "detail" in data &&
+    typeof data.detail === "string"
+  ) {
+    return data.detail;
+  }
+  return null;
+}
+
+function recoveryCodesFrom(data: unknown): string[] | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "recovery_codes" in data &&
+    Array.isArray(data.recovery_codes) &&
+    data.recovery_codes.every((code) => typeof code === "string")
+  ) {
+    return data.recovery_codes;
+  }
+  return null;
+}
 
 function StepIndicator({ currentStep }: { currentStep: 1 | 2 | 3 | 4 }) {
   const steps = [
@@ -73,18 +96,19 @@ function StepIndicator({ currentStep }: { currentStep: 1 | 2 | 3 | 4 }) {
 function StudentActivationContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
+  const isResume = searchParams.get("resume") === "1";
 
   // Step state
-  const [step, setStep] = React.useState<1 | 2 | 3 | 4>(1);
-  const [tokenInput, setTokenInput] = React.useState(searchParams.get("token") || "");
+  const [step, setStep] = React.useState<1 | 2 | 3 | 4>(isResume ? 2 : 1);
+  const [invitationToken] = React.useState(
+    () => searchParams.get("token")?.trim() ?? ""
+  );
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
 
   // Intermediate auth state
-  const [tempAccessToken, setTempAccessToken] = React.useState("");
-  const [totpSecret, setTotpSecret] = React.useState("");
-  const [otpauthUri, setOtpauthUri] = React.useState("");
+  const [qrCodeUrl, setQrCodeUrl] = React.useState("");
   const [totpCode, setTotpCode] = React.useState("");
 
   // Step 4 state
@@ -93,61 +117,93 @@ function StudentActivationContent() {
   const [confirmedSaved, setConfirmedSaved] = React.useState(false);
 
   // Status
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(isResume);
   const [error, setError] = React.useState<string | null>(null);
   const resumeAttempted = React.useRef(false);
+  const qrCodeUrlRef = React.useRef<string | null>(null);
 
-  const beginTwoFactorSetup = React.useCallback(async (onboardingToken: string) => {
+  const replaceQrCodeUrl = React.useCallback((nextUrl: string) => {
+    if (qrCodeUrlRef.current) {
+      URL.revokeObjectURL(qrCodeUrlRef.current);
+    }
+    qrCodeUrlRef.current = nextUrl;
+    setQrCodeUrl(nextUrl);
+  }, []);
+
+  React.useEffect(() => {
+    return () => {
+      if (qrCodeUrlRef.current) {
+        URL.revokeObjectURL(qrCodeUrlRef.current);
+      }
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!searchParams.has("token")) return;
+
+    const visibleParams = new URLSearchParams(searchParams.toString());
+    visibleParams.delete("token");
+    const query = visibleParams.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      query ? `/activate?${query}` : "/activate"
+    );
+  }, [searchParams]);
+
+  const beginTwoFactorSetup = React.useCallback(async () => {
     const setupRes = await fetch(
       `${getApiBaseUrl()}/api/v1/auth/2fa/setup`,
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${onboardingToken}`,
-        },
+        credentials: "include",
+        cache: "no-store",
       }
     );
 
-    const setupData = await setupRes.json().catch(() => ({}));
+    const setupData: unknown = await setupRes.json().catch(() => null);
     if (!setupRes.ok) {
-      throw new Error("Unable to start two-factor authentication setup.");
+      throw new Error(
+        responseDetail(setupData) ??
+          "Unable to start two-factor authentication setup."
+      );
     }
 
-    setTempAccessToken(onboardingToken);
-    setTotpSecret(setupData.secret);
-    setOtpauthUri(setupData.totp_uri);
+    const qrRes = await fetch(`${getApiBaseUrl()}/api/v1/auth/2fa/qr`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!qrRes.ok) {
+      const qrError: unknown = await qrRes.json().catch(() => null);
+      throw new Error(
+        responseDetail(qrError) ?? "Unable to load your QR code. Please try again."
+      );
+    }
+
+    const qrBlob = await qrRes.blob();
+    replaceQrCodeUrl(URL.createObjectURL(qrBlob));
     setStep(2);
-  }, []);
+  }, [replaceQrCodeUrl]);
 
   React.useEffect(() => {
-    if (searchParams.get("resume") !== "1" || resumeAttempted.current) return;
+    if (!isResume || resumeAttempted.current) return;
     resumeAttempted.current = true;
 
     async function resumeOnboarding() {
-      // Resume after the effect completes so initialization does not synchronously
-      // cascade state updates from the effect body.
-      await Promise.resolve();
-
-      const onboardingToken = sessionStorage.getItem(ONBOARDING_RESUME_KEY);
-      sessionStorage.removeItem(ONBOARDING_RESUME_KEY);
-      if (!onboardingToken) {
-        setError("Your onboarding session is unavailable. Sign in again to resume setup.");
-        return;
-      }
-
-      setLoading(true);
       try {
-        await beginTwoFactorSetup(onboardingToken);
+        await beginTwoFactorSetup();
       } catch {
-        setError("Unable to resume two-factor authentication setup. Sign in and try again.");
+        setError(
+          "Your onboarding session has expired. Sign in again to continue setup."
+        );
       } finally {
         setLoading(false);
       }
     }
 
     void resumeOnboarding();
-  }, [beginTwoFactorSetup, searchParams]);
+  }, [beginTwoFactorSetup, isResume]);
 
   // Step 1: Submit invitation token + password
   const handleStep1Submit = async (e: React.FormEvent) => {
@@ -164,44 +220,46 @@ function StudentActivationContent() {
       return;
     }
 
+    if (!invitationToken) {
+      setError(
+        "This invitation link is missing its activation token. Please reopen the link from your invitation email."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/activate`, {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          token: tokenInput.trim(),
+          token: invitationToken,
           password,
           confirm_password: confirmPassword,
         }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
         setError(
-          data.detail ||
+          responseDetail(data) ??
           "Failed to activate invitation. Token may be invalid or expired."
         );
         return;
       }
 
-      if (!data.onboarding_token) {
-        setError(
-          "Account activated, but no onboarding token was returned."
-        );
-        return;
-      }
-
-      const onboardingToken = data.onboarding_token;
-
-      await beginTwoFactorSetup(onboardingToken);
-    } catch {
+      await beginTwoFactorSetup();
+    } catch (caught) {
       setError(
-        "Could not reach Fellow Portal API. Please verify server status."
+        caught instanceof Error
+          ? caught.message
+          : "Unable to connect to the Fellow Portal service. Please try again shortly."
       );
     } finally {
       setLoading(false);
@@ -217,32 +275,33 @@ function StudentActivationContent() {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/2fa/confirm`, {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${tempAccessToken}`,
         },
         body: JSON.stringify({
           code: totpCode.trim(),
         }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(data.detail || "Invalid 6-digit code. Please verify the code in your app.");
-        return;
-      }
-
-      if (!data.access_token) {
         setError(
-          "2FA was confirmed, but no access token was  returned."
+          responseDetail(data) ??
+            "That authentication code is invalid or has expired."
         );
         return;
       }
 
-      setTempAccessToken(data.access_token);
+      const codes = recoveryCodesFrom(data);
+      if (!codes || codes.length === 0) {
+        setError("Your account was activated, but recovery codes could not be displayed.");
+        return;
+      }
 
-      setRecoveryCodes(data.recovery_codes || []);
+      setRecoveryCodes(codes);
       setStep(4);
     } catch {
       setError("Failed to verify 2FA code. Please try again.");
@@ -251,20 +310,28 @@ function StudentActivationContent() {
     }
   };
 
-  const copyAllRecoveryCodes = () => {
-    navigator.clipboard.writeText(recoveryCodes.join("\n"));
-    setCopiedCodes(true);
-    setTimeout(() => setCopiedCodes(false), 3000);
+  const copyAllRecoveryCodes = async () => {
+    try {
+      await navigator.clipboard.writeText(recoveryCodes.join("\n"));
+      setCopiedCodes(true);
+      setTimeout(() => setCopiedCodes(false), 3000);
+    } catch {
+      setError("Unable to copy recovery codes. Please save them manually.");
+    }
   };
 
   const handleFinishOnboarding = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const success = await login(tempAccessToken);
+      const success = await refreshUser();
       if (success) {
+        setRecoveryCodes([]);
         router.push("/");
       } else {
-        router.push("/login");
+        setError(
+          "Your account is active, but the authenticated session could not be loaded. Please sign in again."
+        );
       }
     } finally {
       setLoading(false);
@@ -290,7 +357,7 @@ function StudentActivationContent() {
             Fellowship Account Activation
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Complete the 3-step security onboarding to access your fellowship workspace.
+            Complete the 4-step security onboarding to access your fellowship workspace.
           </p>
         </div>
 
@@ -308,19 +375,11 @@ function StudentActivationContent() {
 
           {step === 1 && (
             <form onSubmit={handleStep1Submit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5">
-                  Invitation Token
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value)}
-                  placeholder="Paste your invitation token here"
-                  className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-sm font-mono text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-brand-orange)]"
-                />
-              </div>
+              {!invitationToken && (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-700 text-xs">
+                  This invitation link is incomplete. Reopen the activation link from your invitation email.
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5">
@@ -358,13 +417,13 @@ function StudentActivationContent() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !invitationToken}
                 className="w-full mt-3 py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying Invitation...</span>
+                    <span>Setting up your account... This may take a moment.</span>
                   </>
                 ) : (
                   <>
@@ -383,48 +442,53 @@ function StudentActivationContent() {
                   <QrCode className="w-8 h-8" />
                 </div>
                 <h3 className="text-base font-bold text-[var(--color-text-primary)]">
-                  Add Account to Authenticator App
+                  Set up two-factor authentication
                 </h3>
                 <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto">
-                  Open Google Authenticator, 1Password, or Authy on your mobile device and add your DegreeLabs account.
+                  Open your authenticator app and scan this QR code.
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] space-y-3">
-                <div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)] block mb-1">
-                    Manual Setup Key
-                  </span>
-                  <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[var(--color-bg-canvas)] border border-[var(--color-border-default)]">
-                    <span className="font-mono text-sm tracking-widest text-[var(--color-text-primary)] select-all break-all">
-                      {totpSecret}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => navigator.clipboard.writeText(totpSecret)}
-                      className="text-xs text-[var(--color-brand-orange)] hover:underline shrink-0 cursor-pointer"
-                    >
-                      Copy Key
-                    </button>
-                  </div>
-                </div>
+              <ol className="space-y-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] p-4 text-xs text-[var(--color-text-secondary)]">
+                <li>1. Open a compatible authenticator app.</li>
+                <li>2. Tap + or Add account.</li>
+                <li>3. Scan the QR code below.</li>
+                <li>4. Continue and enter the generated 6-digit code.</li>
+              </ol>
 
-                <div>
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)] block mb-1">
-                    Authenticator URI
-                  </span>
-                  <p className="text-[11px] font-mono text-[var(--color-text-secondary)] break-all p-2 rounded-lg bg-[var(--color-bg-canvas)] border border-[var(--color-border-default)] select-all">
-                    {otpauthUri}
+              <div className="flex min-h-52 items-center justify-center rounded-xl border border-[var(--color-border-default)] bg-white p-4">
+                {qrCodeUrl ? (
+                  <Image
+                    src={qrCodeUrl}
+                    alt="DegreeLabs two-factor authentication QR code"
+                    width={224}
+                    height={224}
+                    unoptimized
+                    className="h-56 w-56 object-contain"
+                  />
+                ) : loading ? (
+                  <div className="flex flex-col items-center gap-2 text-xs text-[var(--color-text-muted)]">
+                    <Loader2 className="h-6 w-6 animate-spin text-[var(--color-brand-orange)]" />
+                    <span>Loading your secure QR code...</span>
+                  </div>
+                ) : (
+                  <p className="max-w-xs text-center text-xs text-[var(--color-text-muted)]">
+                    Your QR code is unavailable. Return to sign in and resume onboarding.
                   </p>
-                </div>
+                )}
               </div>
+
+              <p className="text-center text-[11px] text-[var(--color-text-muted)]">
+                Supported apps: Google Authenticator, Microsoft Authenticator, Authy, and 1Password.
+              </p>
 
               <button
                 type="button"
                 onClick={() => setStep(3)}
-                className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 text-white font-bold text-sm flex items-center justify-center gap-2 cursor-pointer"
+                disabled={!qrCodeUrl || loading}
+                className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 text-white font-bold text-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                <span>I have configured the app → Verify Code</span>
+                <span>I&apos;ve scanned the QR code</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
@@ -463,7 +527,7 @@ function StudentActivationContent() {
                   onClick={() => setStep(2)}
                   className="flex-1 py-3 px-4 rounded-xl bg-[var(--color-bg-subtle)] hover:bg-[var(--color-border-default)] text-[var(--color-text-secondary)] font-semibold text-sm cursor-pointer"
                 >
-                  Back to Key
+                  Back to QR code
                 </button>
                 <button
                   type="submit"

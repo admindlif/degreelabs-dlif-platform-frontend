@@ -16,119 +16,124 @@ export interface AuthUser {
 
 interface AuthContextType {
   user: AuthUser | null;
-  token: string | null;
   loading: boolean;
   error: string | null;
-  login: (accessToken: string) => Promise<boolean>;
-  logout: () => void;
-  refreshUser: () => Promise<void>;
+  logout: () => Promise<void>;
+  refreshUser: () => Promise<boolean>;
 }
 
 const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
 
-const TOKEN_KEY = "dlif_admin_token";
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+function responseDetail(data: unknown): string | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "detail" in data &&
+    typeof data.detail === "string"
+  ) {
+    return data.detail;
+  }
+  return null;
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null);
-  const [token, setToken] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const router = useRouter();
   const pathname = usePathname();
 
-  const fetchProfile = React.useCallback(async (authToken: string): Promise<AuthUser | null> => {
+  const refreshUser = React.useCallback(async (): Promise<boolean> => {
+    setLoading(true);
+
     try {
       const res = await fetch(`${API_URL}/api/v1/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
       });
 
       if (res.status === 401 || res.status === 403) {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail || "Access denied to Admin Operations Portal.");
-        return null;
+        setUser(null);
+        setError(null);
+        return false;
       }
 
       if (!res.ok) {
-        return null;
+        const data: unknown = await res.json().catch(() => null);
+        setUser(null);
+        setError(
+          responseDetail(data) ??
+            "Unable to verify your Admin Operations session. Please try again."
+        );
+        return false;
       }
 
       const profile: AuthUser = await res.json();
       const role = profile.role.toLowerCase();
       if (role !== "admin" && role !== "super_admin") {
+        setUser(null);
         setError("Access denied: Your account role does not have Administrator privileges.");
-        return null;
+        return false;
       }
 
-      return profile;
+      setUser(profile);
+      setError(null);
+      return true;
     } catch {
-      setError("Unable to connect to Admin API runtime (port 8002).");
-      return null;
+      setUser(null);
+      setError("Unable to connect to the Admin API. Please verify the service is available.");
+      return false;
+    } finally {
+      setLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    async function initAuth() {
-      try {
-        const storedToken = localStorage.getItem(TOKEN_KEY);
-        if (!storedToken) {
-          setLoading(false);
-          return;
-        }
-
-        setToken(storedToken);
-        const profile = await fetchProfile(storedToken);
-        if (profile) {
-          setUser(profile);
-          setError(null);
-        } else {
-          localStorage.removeItem(TOKEN_KEY);
-          setToken(null);
-          setUser(null);
-        }
-      } finally {
-        setLoading(false);
-      }
+    async function initializeSession() {
+      await Promise.resolve();
+      await refreshUser();
     }
 
-    initAuth();
-  }, [fetchProfile]);
+    void initializeSession();
+  }, [refreshUser]);
 
-  const login = async (accessToken: string): Promise<boolean> => {
-    setLoading(true);
+  const logout = React.useCallback(async (): Promise<void> => {
     setError(null);
+
     try {
-      const profile = await fetchProfile(accessToken);
-      if (!profile) {
-        return false;
+      const res = await fetch(`${API_URL}/api/v1/auth/logout`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const message =
+          responseDetail(data) ??
+          "Unable to sign out. Please try again before closing this browser.";
+        setError(message);
+        throw new Error(message);
       }
 
-      localStorage.setItem(TOKEN_KEY, accessToken);
-      setToken(accessToken);
-      setUser(profile);
-      return true;
-    } finally {
-      setLoading(false);
-    }
-  };
+      setUser(null);
+      setError(null);
+      router.push("/login");
+    } catch (caught) {
+      if (caught instanceof Error) {
+        setError(caught.message);
+        throw caught;
+      }
 
-  const logout = React.useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    setToken(null);
-    setUser(null);
-    setError(null);
-    router.push("/login");
+      const message =
+        "Unable to connect to the Admin API. Please try signing out again.";
+      setError(message);
+      throw new Error(message);
+    }
   }, [router]);
-
-  const refreshUser = async () => {
-    if (!token) return;
-    const profile = await fetchProfile(token);
-    if (profile) {
-      setUser(profile);
-    }
-  };
 
   // Route protection
   React.useEffect(() => {
@@ -146,10 +151,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        token,
         loading,
         error,
-        login,
         logout,
         refreshUser,
       }}

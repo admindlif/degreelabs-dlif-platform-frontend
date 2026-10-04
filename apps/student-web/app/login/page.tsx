@@ -8,18 +8,38 @@ import { Shield, Lock, Mail, KeyRound, AlertCircle, ArrowRight, ArrowLeft, Loade
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api/config";
 
-const ONBOARDING_RESUME_KEY = "dlif_onboarding_resume";
+function responseDetail(data: unknown): string | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "detail" in data &&
+    typeof data.detail === "string"
+  ) {
+    return data.detail;
+  }
+  return null;
+}
+
+function requiresTwoFactor(data: unknown): boolean | null {
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "requires_2fa" in data &&
+    typeof data.requires_2fa === "boolean"
+  ) {
+    return data.requires_2fa;
+  }
+  return null;
+}
 
 export default function StudentLoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { refreshUser } = useAuth();
 
   // Stage: 1 = Email + Password, 2 = 2FA TOTP / Recovery Code
   const [stage, setStage] = React.useState<1 | 2>(1);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [challengeToken, setChallengeToken] = React.useState("");
-
   // Stage 2 inputs
   const [code, setCode] = React.useState("");
   const [isRecoveryCode, setIsRecoveryCode] = React.useState(false);
@@ -37,32 +57,35 @@ export default function StudentLoginPage() {
       const apiBaseUrl = getApiBaseUrl();
       const res = await fetch(`${apiBaseUrl}/api/v1/auth/login`, {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), password }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
         if (res.status === 403) {
           const resumeRes = await fetch(`${apiBaseUrl}/api/v1/auth/onboarding/resume`, {
             method: "POST",
+            credentials: "include",
+            cache: "no-store",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: email.trim(), password }),
           });
-          const resumeData = await resumeRes.json().catch(() => ({}));
-          if (resumeRes.ok && resumeData.onboarding_token) {
-            sessionStorage.setItem(ONBOARDING_RESUME_KEY, resumeData.onboarding_token);
+          if (resumeRes.ok) {
             router.push("/activate?resume=1");
             return;
           }
         }
-        setError(data.detail || "Invalid email or password.");
+        setError(responseDetail(data) ?? "Invalid email or password.");
         return;
       }
 
-      if (data.access_token) {
-        const success = await login(data.access_token);
+      const needsTwoFactor = requiresTwoFactor(data);
+      if (needsTwoFactor === false) {
+        const success = await refreshUser();
         if (success) {
           router.push("/");
           return;
@@ -72,8 +95,7 @@ export default function StudentLoginPage() {
         }
       }
 
-      if (data.requires_2fa && data.challenge_token) {
-        setChallengeToken(data.challenge_token);
+      if (needsTwoFactor === true) {
         setStage(2);
       } else {
         setError("Unexpected response from authentication service.");
@@ -93,32 +115,49 @@ export default function StudentLoginPage() {
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/2fa/verify`, {
         method: "POST",
+        credentials: "include",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          challenge_token: challengeToken,
-          code: code.trim(),
-        }),
+        body: JSON.stringify({ code: code.trim() }),
       });
 
-      const data = await res.json().catch(() => ({}));
+      const data: unknown = await res.json().catch(() => null);
 
       if (!res.ok) {
-        setError(data.detail || "Invalid verification code. Please check and try again.");
+        const detail = responseDetail(data);
+        const challengeExpired =
+          res.status === 401 &&
+          detail !== null &&
+          (detail.toLowerCase().includes("challenge") ||
+            detail.toLowerCase().includes("expired"));
+
+        if (challengeExpired) {
+          setStage(1);
+          setCode("");
+          setError("Your 2FA session has expired. Please sign in again.");
+          return;
+        }
+
+        setError(
+          detail ?? "That authentication code is invalid or has expired."
+        );
         return;
       }
 
-      if (data.access_token) {
-        const success = await login(data.access_token);
-        if (success) {
-          router.push("/");
-        } else {
-          setError("Your account does not have Fellow access for this portal.");
-          setStage(1);
-          setCode("");
-        }
+      const success = await refreshUser();
+      if (success) {
+        router.push("/");
+      } else {
+        setError(
+          "Authentication succeeded, but your Fellow session could not be loaded. Please sign in again."
+        );
+        setStage(1);
+        setCode("");
       }
     } catch {
-      setError("Unable to complete 2FA verification. Please try again.");
+      setError(
+        "Unable to connect to the Fellow Portal service. Please try again shortly."
+      );
     } finally {
       setLoading(false);
     }
@@ -157,7 +196,7 @@ export default function StudentLoginPage() {
             {stage === 1
               ? "Access your DISCOVER phase, cohorts, and learning roadmaps."
               : isRecoveryCode
-              ? "Enter one of your 8-character emergency recovery codes."
+              ? "Enter one of your one-time emergency recovery codes."
               : "Enter the 6-digit code from your authenticator app."}
           </p>
         </div>
@@ -217,7 +256,7 @@ export default function StudentLoginPage() {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Verifying Credentials...</span>
+                    <span>Signing you in...</span>
                   </>
                 ) : (
                   <>

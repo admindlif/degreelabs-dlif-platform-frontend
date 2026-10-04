@@ -10,9 +10,11 @@
     "dev:vinext": "vite dev --port 3001",
     "build:vinext": "vite build",
     "start:vinext": "vite preview",
-    "deploy:vinext": "vinext-cloudflare deploy"
+    "deploy:vinext": "vinext-cloudflare deploy",
+    "deploy:response-store": "cf deploy --prebuilt --mode production --worker student-web-response-store"
   },
   "dependencies": {
+    "@cloudflare/workers-response-store": "^1.0.1",
     "@vinext/cloudflare": "^1.0.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.48.0",
