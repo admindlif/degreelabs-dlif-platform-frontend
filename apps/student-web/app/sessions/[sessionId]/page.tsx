@@ -78,6 +78,7 @@ function SessionWorkspaceContent() {
 
     const [session, setSession] =
         React.useState<SessionDetail | null>(null);
+    const [currentTime] = React.useState(() => Date.now());
 
     const [resources, setResources] =
         React.useState<PhaseResource[]>([]);
@@ -441,6 +442,11 @@ function SessionWorkspaceContent() {
             },
         ];
 
+    const sessionHasEnded =
+        session.status === "completed" ||
+        (!!session.end_at &&
+            new Date(session.end_at).getTime() < currentTime);
+
     return (
         <PortalShell
             breadcrumbItems={[
@@ -528,7 +534,16 @@ function SessionWorkspaceContent() {
                                     </p>
                                 </div>
 
-                                {session.meeting_url ? (
+                                {sessionHasEnded ? (
+                                    <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
+                                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                                            Session completed
+                                        </p>
+                                        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                                            This session has already ended. You can no longer join this meeting.
+                                        </p>
+                                    </div>
+                                ) : session.meeting_url ? (
                                     <a
                                         href={session.meeting_url}
                                         target="_blank"
@@ -540,8 +555,7 @@ function SessionWorkspaceContent() {
                                     </a>
                                 ) : (
                                     <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5 text-sm text-[var(--color-text-muted)]">
-                                        Meeting link has not been
-                                        published yet.
+                                        Meeting link has not been published yet.
                                     </div>
                                 )}
                             </div>

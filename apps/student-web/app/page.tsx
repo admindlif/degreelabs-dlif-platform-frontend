@@ -8,17 +8,11 @@ import { LiveSessionSpotlight } from "@/components/discover/live-session-spotlig
 import { FellowToolkit } from "@/components/discover/fellow-toolkit";
 import { FourWeekRoadmap } from "@/components/discover/four-week-roadmap";
 import { Button } from "@/components/ui/button";
+import { ApiError } from "@/lib/api/client";
 import { getFellowContext } from "@/lib/api/fellow";
 import { getDiscoverOverview, getDiscoverWeeks } from "@/lib/api/discover";
 import { DiscoverOverview, DiscoverWeek, FellowContext } from "@/lib/api/types";
 
-async function fetchDashboardData() {
-  return Promise.allSettled([
-    getFellowContext(),
-    getDiscoverOverview(),
-    getDiscoverWeeks(),
-  ]);
-}
 
 const DASHBOARD_ERROR_MESSAGE = "Unable to load your fellowship dashboard.";
 
@@ -26,33 +20,71 @@ export default function DiscoverHomePage() {
   const [context, setContext] = React.useState<FellowContext | null>(null);
   const [overview, setOverview] = React.useState<DiscoverOverview | null>(null);
   const [weeks, setWeeks] = React.useState<DiscoverWeek[] | null>(null);
-  const [loading, setLoading] = React.useState(true);
   const [retrying, setRetrying] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [awaitingCohort, setAwaitingCohort] = React.useState(false);
 
   const loadData = React.useCallback(async () => {
     try {
-      const [contextResult, overviewResult, weeksResult] =
-        await fetchDashboardData();
+      setError(null);
+      setAwaitingCohort(false);
 
-      if (contextResult.status === "fulfilled") {
-        setContext(contextResult.value);
+      // First check whether the Fellow has a cohort assigned
+      let fellowContext: FellowContext;
+
+      try {
+        fellowContext = await getFellowContext();
+      } catch (err) {
+        // No active cohort = expected state, not an error
+        if (
+          err instanceof ApiError &&
+          err.status === 404 &&
+          typeof err.data === "object" &&
+          err.data !== null &&
+          "detail" in err.data &&
+          typeof err.data.detail === "string" &&
+          err.data.detail.toLowerCase().includes("no active cohort enrollment")
+        ) {
+          setContext(null);
+          setOverview(null);
+          setWeeks(null);
+          setAwaitingCohort(true);
+          return;
+        }
+
+        // Any other error is a real dashboard error
+        throw err;
       }
+
+      // Cohort exists
+      setContext(fellowContext);
+
+      // Only load dashboard data after context succeeds
+      const [overviewResult, weeksResult] = await Promise.allSettled([
+        getDiscoverOverview(),
+        getDiscoverWeeks(),
+      ]);
+
       if (overviewResult.status === "fulfilled") {
         setOverview(overviewResult.value);
-      }
-      if (weeksResult.status === "fulfilled") {
-        setWeeks(weeksResult.value);
+      } else {
+        throw overviewResult.reason;
       }
 
-      const failed = [contextResult, overviewResult, weeksResult].some(
-        (result) => result.status === "rejected"
-      );
-      setError(failed ? DASHBOARD_ERROR_MESSAGE : null);
-    } catch {
+      if (weeksResult.status === "fulfilled") {
+        setWeeks(weeksResult.value);
+      } else {
+        throw weeksResult.reason;
+      }
+
+      setError(null);
+      setAwaitingCohort(false);
+    } catch (err) {
+      console.error("Failed to load fellowship dashboard:", err);
+
+      setAwaitingCohort(false);
       setError(DASHBOARD_ERROR_MESSAGE);
     } finally {
-      setLoading(false);
       setRetrying(false);
     }
   }, []);
@@ -60,49 +92,40 @@ export default function DiscoverHomePage() {
   const retryLoad = React.useCallback(() => {
     setRetrying(true);
     setError(null);
+    setAwaitingCohort(false);
     void loadData();
   }, [loadData]);
 
   React.useEffect(() => {
-    let cancelled = false;
+    queueMicrotask(() => void loadData());
+  }, [loadData]);
 
-    void fetchDashboardData()
-      .then(([contextResult, overviewResult, weeksResult]) => {
-        if (cancelled) return;
-
-        if (contextResult.status === "fulfilled") {
-          setContext(contextResult.value);
-        }
-        if (overviewResult.status === "fulfilled") {
-          setOverview(overviewResult.value);
-        }
-        if (weeksResult.status === "fulfilled") {
-          setWeeks(weeksResult.value);
-        }
-
-        const failed = [contextResult, overviewResult, weeksResult].some(
-          (result) => result.status === "rejected"
-        );
-        setError(failed ? DASHBOARD_ERROR_MESSAGE : null);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setError(DASHBOARD_ERROR_MESSAGE);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (loading) {
+  // Fellow is logged in but has not been assigned to a cohort yet
+  if (awaitingCohort) {
     return (
-      <PortalShell breadcrumbItems={["Overview"]} context={context}>
-        <div className="rounded-2xl border border-[var(--color-border-default)] p-12 text-center text-sm text-[var(--color-text-muted)]">
-          Loading fellowship overview...
+      <PortalShell breadcrumbItems={["Overview"]} context={null}>
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <div className="w-full max-w-2xl rounded-2xl border border-[var(--color-border-default)] bg-white p-8 text-center shadow-sm sm:p-12">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-background-subtle)]">
+              <span className="text-2xl">🎓</span>
+            </div>
+
+            <h1 className="mt-6 text-2xl font-semibold text-[var(--color-text-primary)]">
+              Your fellowship journey is almost ready
+            </h1>
+
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-[var(--color-text-muted)]">
+              You’re successfully registered as a Fellow. Your cohort assignment
+              is currently being finalized. Once you’re assigned to a cohort,
+              your fellowship schedule, resources, and learning activities will
+              appear here.
+            </p>
+
+            <p className="mt-6 text-sm font-medium text-[var(--color-text-primary)]">
+              You don’t need to do anything right now. We’ll update your portal
+              once your cohort assignment is complete.
+            </p>
+          </div>
         </div>
       </PortalShell>
     );
