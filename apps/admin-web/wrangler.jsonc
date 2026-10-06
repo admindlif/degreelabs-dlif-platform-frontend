@@ -1,6 +1,6 @@
 {
     "name": "degreelabs-dlif-platform-frontend-admin",
-    "main": "dist/server/index.js",
+    "main": "vinext/server/fetch-handler",
     "compatibility_date": "2026-10-02",
     "compatibility_flags": [
         "nodejs_compat"
