@@ -44,11 +44,42 @@ function formatSessionTime(
 export function LiveSessionSpotlight({ session }: LiveSessionSpotlightProps) {
   if (!session) {
     return (
-      <Card variant="elevated" className="h-full">
-        <CardTitle className="text-2xl font-extrabold">No upcoming Session</CardTitle>
-        <CardDescription className="mt-2">
-          The next Session will appear here after it is scheduled for your Cohort.
-        </CardDescription>
+      <Card
+        variant="elevated"
+        className="h-full flex min-h-[300px] flex-col justify-between"
+      >
+        <div>
+          <div className="mb-6 flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-[var(--color-brand-orange)]" />
+            <span className="text-xs font-bold uppercase tracking-wider text-[var(--color-brand-orange)]">
+              Upcoming Session
+            </span>
+          </div>
+
+          <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-brand-orange)]">
+            <Clock className="h-5 w-5" />
+          </div>
+
+          <CardTitle className="text-2xl font-extrabold md:text-3xl">
+            No upcoming Session
+          </CardTitle>
+
+          <CardDescription className="mt-3 max-w-xl text-base leading-6 text-[var(--color-text-body)]">
+            Your next Session will appear here once it is scheduled for your Team.
+          </CardDescription>
+        </div>
+
+        <div className="mt-8 border-t border-[var(--color-border-default)] pt-6">
+          <Button
+            variant="primary"
+            size="lg"
+            disabled
+            className="w-full sm:w-auto"
+          >
+            <Clock className="h-4 w-4" />
+            <span>Schedule to be announced</span>
+          </Button>
+        </div>
       </Card>
     );
   }
