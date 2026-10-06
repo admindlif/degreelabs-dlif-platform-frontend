@@ -33,9 +33,9 @@ function formatSessionTime(
   });
   const endTime = end
     ? end.toLocaleTimeString(undefined, {
-        hour: "numeric",
-        minute: "2-digit",
-      })
+      hour: "numeric",
+      minute: "2-digit",
+    })
     : null;
 
   return `${date}, ${startTime}${endTime ? ` – ${endTime}` : ""}`;
@@ -55,6 +55,10 @@ export function LiveSessionSpotlight({ session }: LiveSessionSpotlightProps) {
 
   const isLocked = !session.is_unlocked;
   const isLive = session.status === "live";
+  const sessionHasEnded =
+    session.status === "completed" ||
+    (!!session.end_at && new Date(session.end_at).getTime() < Date.now());
+
   const sessionBadgeLabel = session.session_type === "induction"
     ? "Session 0: Induction"
     : session.session_type === "output_review"
@@ -104,7 +108,12 @@ export function LiveSessionSpotlight({ session }: LiveSessionSpotlightProps) {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 border-t border-[var(--color-border-default)] pt-6">
-        {session.meeting_url && !isLocked ? (
+        {sessionHasEnded ? (
+          <Button variant="primary" size="lg" disabled className="w-full sm:w-auto">
+            <Video className="h-4 w-4" />
+            <span>Session completed</span>
+          </Button>
+        ) : session.meeting_url && !isLocked ? (
           <a
             href={session.meeting_url}
             target="_blank"
