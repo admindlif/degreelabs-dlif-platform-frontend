@@ -1,6 +1,6 @@
 {
     "name": "degreelabs-dlif-platform-frontend-admin",
-    "main": "vinext/server/fetch-handler",
+    "main": ".cloudflare/output/v0/workers/default/bundle/ssr/index.js",
     "compatibility_date": "2026-10-02",
     "compatibility_flags": [
         "nodejs_compat"
