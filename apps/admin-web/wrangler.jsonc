@@ -1,0 +1,9 @@
+{
+    "name": "degreelabs-dlif-platform-frontend-admin",
+    "main": "dist/server/index.js",
+    "compatibility_date": "2026-10-02",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "previews": {}
+}
