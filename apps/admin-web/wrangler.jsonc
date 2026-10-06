@@ -1,0 +1,14 @@
+{
+    "name": "degreelabs-dlif-platform-frontend-admin",
+    "main": ".cloudflare/output/v0/workers/default/bundle/index.js",
+    "compatibility_date": "2026-10-02",
+    "compatibility_flags": [
+        "nodejs_compat"
+    ],
+    "assets": {
+        "directory": ".cloudflare/output/v0/workers/default/assets",
+        "binding": "ASSETS",
+        "not_found_handling": "none"
+    },
+    "previews": {}
+}
