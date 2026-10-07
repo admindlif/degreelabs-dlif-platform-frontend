@@ -196,8 +196,8 @@ export default function StudentLoginPage() {
             {stage === 1
               ? "Access your DISCOVER phase, cohorts, and learning roadmaps."
               : isRecoveryCode
-              ? "Enter one of your one-time emergency recovery codes."
-              : "Enter the 6-digit code from your authenticator app."}
+                ? "Enter one of your one-time emergency recovery codes."
+                : "Enter the 6-digit code from your authenticator app."}
           </p>
         </div>
 
@@ -350,7 +350,7 @@ export default function StudentLoginPage() {
 
         {/* Footer info */}
         <div className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
-          DLIF Platform • Port 3000 • Secured with Argon2 + TOTP 2FA
+          DLIF ThinkProveDeliver
         </div>
       </div>
     </div>
