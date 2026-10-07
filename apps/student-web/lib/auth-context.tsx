@@ -157,6 +157,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
+  const publicPaths = ["/login", "/activate"];
+  const isPublic = publicPaths.some((path) => pathname.startsWith(path));
+
+  if (loading && !isPublic) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <div className="text-sm text-gray-500">
+          Loading...
+        </div>
+      </div>
+    );
+  }
+
+  if (!user && !isPublic) {
+    return null;
+  }
+
   return (
     <AuthContext.Provider
       value={{
