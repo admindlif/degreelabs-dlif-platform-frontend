@@ -9,7 +9,6 @@ import {
   Compass,
   Users,
   Bell,
-  ShieldCheck,
   LogOut,
   LockKeyhole,
   Circle,
@@ -112,9 +111,9 @@ function SessionSidebarItem({
       style={
         selected
           ? {
-              background:
-                "linear-gradient(90deg, color-mix(in srgb, var(--color-brand-orange) 13%, white), white 82%)",
-            }
+            background:
+              "linear-gradient(90deg, color-mix(in srgb, var(--color-brand-orange) 13%, white), white 82%)",
+          }
           : undefined
       }
     >
@@ -177,9 +176,9 @@ function AccordionHeader({
       style={
         current
           ? {
-              background:
-                "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-orange) 12%, white), white 72%)",
-            }
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-orange) 12%, white), white 72%)",
+          }
           : undefined
       }
     >
@@ -440,12 +439,6 @@ export function Sidebar({
             icon: Bell,
             subtitle: "Checklist & updates",
           },
-          {
-            name: "Profile & 2FA",
-            href: "/profile",
-            icon: ShieldCheck,
-            subtitle: "Account & security",
-          },
         ],
       },
     ];
@@ -626,9 +619,9 @@ export function Sidebar({
                     style={
                       isActive
                         ? {
-                            background:
-                              "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-orange) 10%, white), white 75%)",
-                          }
+                          background:
+                            "linear-gradient(135deg, color-mix(in srgb, var(--color-brand-orange) 10%, white), white 75%)",
+                        }
                         : undefined
                     }
                   >
