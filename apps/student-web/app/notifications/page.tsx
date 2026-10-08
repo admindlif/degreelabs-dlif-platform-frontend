@@ -76,13 +76,12 @@ function ChecklistRow({
 
   return (
     <article
-      className={`rounded-2xl border p-4 transition-colors sm:p-5 ${
-        overdue
-          ? "border-red-200 bg-red-50"
-          : completed
-            ? "border-emerald-200 bg-emerald-50"
-            : "border-[var(--color-border-default)] bg-white"
-      }`}
+      className={`rounded-2xl border p-4 transition-colors sm:p-5 ${overdue
+        ? "border-red-200 bg-red-50"
+        : completed
+          ? "border-emerald-200 bg-emerald-50"
+          : "border-[var(--color-border-default)] bg-white"
+        }`}
     >
       <div className="flex min-w-0 items-start gap-3 sm:gap-4">
         <button
@@ -91,11 +90,10 @@ function ChecklistRow({
           disabled={saving}
           aria-label={completed ? `Mark ${item.title} as pending` : `Mark ${item.title} as completed`}
           aria-pressed={completed}
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-orange)] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${
-            completed
-              ? "border-[var(--color-success)] bg-[var(--color-success)] text-white"
-              : "border-[var(--color-border-strong)] bg-white text-transparent hover:border-[var(--color-brand-orange)]"
-          }`}
+          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-orange)] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${completed
+            ? "border-[var(--color-success)] bg-[var(--color-success)] text-white"
+            : "border-[var(--color-border-strong)] bg-white text-transparent hover:border-[var(--color-brand-orange)]"
+            }`}
         >
           {saving ? (
             <LoaderCircle className="h-4 w-4 animate-spin text-[var(--color-brand-orange)]" />
@@ -109,9 +107,8 @@ function ChecklistRow({
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <h3
-                  className={`break-words font-bold text-[var(--color-text-primary)] ${
-                    completed ? "line-through opacity-65" : ""
-                  }`}
+                  className={`break-words font-bold text-[var(--color-text-primary)] ${completed ? "line-through opacity-65" : ""
+                    }`}
                 >
                   {item.title}
                 </h3>
@@ -223,6 +220,7 @@ export default function NotificationsPage() {
     try {
       await updateChecklistCompletion(item.id, !item.is_completed);
       await loadChecklist();
+      window.dispatchEvent(new CustomEvent("checklist-updated"));
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update this item.");
     } finally {
@@ -242,11 +240,11 @@ export default function NotificationsPage() {
   ];
 
   return (
-    <PortalShell breadcrumbItems={["Notifications"]}>
+    <PortalShell breadcrumbItems={["Checklist"]}>
       <div className="space-y-6">
         <header>
           <h1 className="text-2xl font-extrabold">
-            Notifications
+            Checklist
           </h1>
           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
             Stay updated with fellowship actions and important updates.
@@ -276,32 +274,32 @@ export default function NotificationsPage() {
             {checklist && (
               <>
                 <section className="rounded-2xl border border-[var(--color-border-default)] bg-white p-5 sm:p-6">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-brand-orange-subtle)] text-[var(--color-brand-orange)]">
-                          <ClipboardCheck className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand-orange)]">Checklist</p>
-                          <h2 className="text-lg font-extrabold text-[var(--color-brand-navy)]">
-                            {checklist.summary.completed} of {checklist.summary.total} completed
-                          </h2>
-                        </div>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--color-brand-orange-subtle)] text-[var(--color-brand-orange)]">
+                        <ClipboardCheck className="h-5 w-5" />
                       </div>
-                      <span className="text-2xl font-extrabold text-[var(--color-brand-navy)]">
-                        {checklist.summary.percentage}%
-                      </span>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--color-brand-orange)]">Checklist</p>
+                        <h2 className="text-lg font-extrabold text-[var(--color-brand-navy)]">
+                          {checklist.summary.completed} of {checklist.summary.total} completed
+                        </h2>
+                      </div>
                     </div>
+                    <span className="text-2xl font-extrabold text-[var(--color-brand-navy)]">
+                      {checklist.summary.percentage}%
+                    </span>
+                  </div>
 
-                    <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-[var(--color-bg-subtle)]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={checklist.summary.percentage}>
-                      <div className="h-full rounded-full bg-[var(--color-brand-orange)] transition-[width] duration-300" style={{ width: `${checklist.summary.percentage}%` }} />
-                    </div>
+                  <div className="mt-5 h-2.5 overflow-hidden rounded-full bg-[var(--color-bg-subtle)]" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={checklist.summary.percentage}>
+                    <div className="h-full rounded-full bg-[var(--color-brand-orange)] transition-[width] duration-300" style={{ width: `${checklist.summary.percentage}%` }} />
+                  </div>
 
-                    <div className="mt-5 grid grid-cols-3 divide-x divide-[var(--color-border-default)] rounded-2xl bg-[var(--color-bg-surface)] py-3 text-center">
-                      <div><strong className="block text-lg text-[var(--color-danger)]">{checklist.summary.overdue}</strong><span className="text-xs text-[var(--color-text-muted)]">Overdue</span></div>
-                      <div><strong className="block text-lg text-[var(--color-text-primary)]">{toDoCount}</strong><span className="text-xs text-[var(--color-text-muted)]">To Do</span></div>
-                      <div><strong className="block text-lg text-[var(--color-success)]">{checklist.summary.completed}</strong><span className="text-xs text-[var(--color-text-muted)]">Completed</span></div>
-                    </div>
+                  <div className="mt-5 grid grid-cols-3 divide-x divide-[var(--color-border-default)] rounded-2xl bg-[var(--color-bg-surface)] py-3 text-center">
+                    <div><strong className="block text-lg text-[var(--color-danger)]">{checklist.summary.overdue}</strong><span className="text-xs text-[var(--color-text-muted)]">Overdue</span></div>
+                    <div><strong className="block text-lg text-[var(--color-text-primary)]">{toDoCount}</strong><span className="text-xs text-[var(--color-text-muted)]">To Do</span></div>
+                    <div><strong className="block text-lg text-[var(--color-success)]">{checklist.summary.completed}</strong><span className="text-xs text-[var(--color-text-muted)]">Completed</span></div>
+                  </div>
                 </section>
 
                 <nav aria-label="Checklist filters" className="flex max-w-full gap-2 overflow-x-auto pb-1">

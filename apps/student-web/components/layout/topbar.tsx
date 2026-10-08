@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
-import { Bell, ChevronRight, Menu, Search } from "lucide-react";
+import { ChevronRight, Menu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SessionSummary } from "@/lib/api/types";
+import { NotificationPopover } from "./notification-popover";
 
 interface TopbarProps {
   breadcrumbs?: string[];
@@ -59,19 +59,7 @@ export function Topbar({
         ))}
       </div>
 
-      <div className="hidden xl:flex items-center flex-1 max-w-md mx-4">
-        <div className="relative w-full">
-          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
-          <input
-            type="text"
-            disabled
-            aria-label="Portal search is not available yet"
-            title="Portal search is not available yet"
-            placeholder="Search is not available yet"
-            className="w-full cursor-not-allowed bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-xs text-[var(--color-text-muted)] rounded-full pl-9 pr-4 py-2 outline-none opacity-70 placeholder:text-[var(--color-text-muted)]"
-          />
-        </div>
-      </div>
+
 
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         {nextSessionLabel && (
@@ -83,14 +71,7 @@ export function Topbar({
           </div>
         )}
 
-        <Link
-          href="/notifications"
-          aria-label="Notifications"
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] shadow-xs transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)]"
-          title="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-        </Link>
+        <NotificationPopover />
 
         <Badge variant="blue" size="md" className="hidden sm:inline-flex">
           {roleTitle}

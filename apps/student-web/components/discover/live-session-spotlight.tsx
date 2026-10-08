@@ -1,3 +1,4 @@
+import * as React from "react";
 import { Clock, Video } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,8 @@ function formatSessionTime(
 }
 
 export function LiveSessionSpotlight({ session }: LiveSessionSpotlightProps) {
+  const [now] = React.useState(() => Date.now());
+
   if (!session) {
     return (
       <Card
@@ -88,7 +91,7 @@ export function LiveSessionSpotlight({ session }: LiveSessionSpotlightProps) {
   const isLive = session.status === "live";
   const sessionHasEnded =
     session.status === "completed" ||
-    (!!session.end_at && new Date(session.end_at).getTime() < Date.now());
+    (!!session.end_at && new Date(session.end_at).getTime() < now);
 
   const sessionBadgeLabel = session.session_type === "induction"
     ? "Session 0: Induction"

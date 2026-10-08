@@ -349,7 +349,7 @@ export default function StudentLoginPage() {
         </div>
 
         {/* Footer info */}
-        <div className="mt-6 text-center text-xs text-[var(--color-text-muted)]">
+        <div className="mt-6 text-center text-xs text-[var(--color-brand-orange)] font-semibold animate-dlif-pulse">
           DLIF ThinkProveDeliver
         </div>
       </div>
