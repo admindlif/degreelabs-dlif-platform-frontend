@@ -14,3 +14,15 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── DLIF tagline blink animation ────────────────────────────────────────── */
+@keyframes dlif-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-dlif-pulse {
+    animation: dlif-pulse 1.8s ease-in-out infinite;
+  }
+}

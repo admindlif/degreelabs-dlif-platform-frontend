@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -8,13 +9,13 @@ import {
   BriefcaseBusiness,
   Compass,
   Users,
-  Bell,
   LogOut,
   LockKeyhole,
   Circle,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  ClipboardCheck,
 } from "lucide-react";
 
 import { getDiscoverWeeks } from "@/lib/api/discover";
@@ -434,9 +435,9 @@ export function Sidebar({
         title: "Account",
         items: [
           {
-            name: "Notifications",
+            name: "Checklist",
             href: "/notifications",
-            icon: Bell,
+            icon: ClipboardCheck,
             subtitle: "Checklist & updates",
           },
         ],

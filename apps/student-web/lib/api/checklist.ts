@@ -1,5 +1,10 @@
 import { apiClient } from "./client";
-import { ChecklistItem, FellowChecklistResponse } from "./types";
+import { ChecklistItem, ChecklistRemindersResponse, FellowChecklistResponse } from "./types";
+
+export async function getFellowChecklistReminders(): Promise<ChecklistRemindersResponse> {
+  return apiClient<ChecklistRemindersResponse>("/api/v1/fellow/checklist-reminders");
+}
+
 
 export async function getFellowChecklist(): Promise<FellowChecklistResponse> {
   return apiClient<FellowChecklistResponse>("/api/v1/fellow/checklist");

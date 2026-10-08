@@ -225,3 +225,21 @@ export interface FellowChecklistResponse {
   summary: ChecklistSummary;
   items: ChecklistItem[];
 }
+
+// --- Checklist Reminders (header notification popover) ---
+
+export type ChecklistReminderStatus = "overdue" | "pending";
+
+export interface ChecklistReminderItem {
+  id: string;
+  title: string;
+  message: string;
+  status: ChecklistReminderStatus;
+  due_at: string | null;
+  target_url: string;
+}
+
+export interface ChecklistRemindersResponse {
+  total_count: number;
+  reminders: ChecklistReminderItem[];
+}
