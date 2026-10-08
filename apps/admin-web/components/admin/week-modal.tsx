@@ -91,10 +91,10 @@ export function WeekModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
       <form
         onSubmit={handleSubmit}
-        className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-6 w-full max-w-xl shadow-2xl max-h-[90vh] overflow-y-auto"
+        className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-6 w-full max-w-xl shadow-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[90vh] overflow-y-auto"
       >
         <div className="flex items-start justify-between mb-6">
           <div>
@@ -145,7 +145,7 @@ export function WeekModal({
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold mb-1">
                 Week Number
@@ -244,7 +244,7 @@ export function WeekModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-[var(--color-border-default)]">
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 mt-6 pt-4 border-t border-[var(--color-border-default)]">
           <button
             type="button"
             onClick={onClose}

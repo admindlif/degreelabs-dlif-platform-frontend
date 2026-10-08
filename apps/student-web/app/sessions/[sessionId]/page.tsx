@@ -6,6 +6,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import {
     ArrowLeft,
     Calendar,
+    ChevronDown,
     FileCheck,
     FolderOpen,
     MessageSquare,
@@ -132,6 +133,10 @@ function SessionWorkspaceContent() {
     const [feedbackLoaded, setFeedbackLoaded] =
         React.useState(false);
 
+    // Mobile-only accordion: which section is open. Default = "overview".
+    const [mobileOpenSection, setMobileOpenSection] =
+        React.useState<Tab | null>(activeTab || "overview");
+
     const loadSession = React.useCallback(
         async () => {
             try {
@@ -174,6 +179,12 @@ function SessionWorkspaceContent() {
         );
     }, [pathname, router, searchParams]);
 
+    // Toggle mobile accordion section.
+    // Pure local toggle: collapses if currently open, opens if closed.
+    const toggleMobileSection = React.useCallback((tab: Tab) => {
+        setMobileOpenSection((prev) => (prev === tab ? null : tab));
+    }, []);
+
     React.useEffect(() => {
         if (!sessionId) return;
 
@@ -199,8 +210,12 @@ function SessionWorkspaceContent() {
     }, [sessionId]);
 
     React.useEffect(() => {
+        const isNeeded =
+            activeTab === "resources" ||
+            mobileOpenSection === "resources";
+
         if (
-            activeTab !== "resources" ||
+            !isNeeded ||
             resourcesLoaded ||
             !sessionId
         ) {
@@ -230,13 +245,18 @@ function SessionWorkspaceContent() {
         loadResources();
     }, [
         activeTab,
+        mobileOpenSection,
         resourcesLoaded,
         sessionId,
     ]);
 
     React.useEffect(() => {
+        const isNeeded =
+            activeTab === "submission" ||
+            mobileOpenSection === "submission";
+
         if (
-            activeTab !== "submission" ||
+            !isNeeded ||
             submissionLoaded ||
             !sessionId ||
             !session?.submission_enabled
@@ -274,14 +294,19 @@ function SessionWorkspaceContent() {
         loadSubmission();
     }, [
         activeTab,
+        mobileOpenSection,
         submissionLoaded,
         sessionId,
         session?.submission_enabled,
     ]);
 
     React.useEffect(() => {
+        const isNeeded =
+            activeTab === "feedback" ||
+            mobileOpenSection === "feedback";
+
         if (
-            activeTab !== "feedback" ||
+            !isNeeded ||
             feedbackLoaded ||
             !sessionId
         ) {
@@ -312,6 +337,7 @@ function SessionWorkspaceContent() {
         loadFeedback();
     }, [
         activeTab,
+        mobileOpenSection,
         feedbackLoaded,
         sessionId,
     ]);
@@ -447,6 +473,425 @@ function SessionWorkspaceContent() {
         (!!session.end_at &&
             new Date(session.end_at).getTime() < currentTime);
 
+    // ── Shared content blocks (used by both desktop tabs and mobile accordion) ──
+
+    const overviewContent = (
+        <div className="space-y-6">
+            <div>
+                <h2 className="text-lg font-bold">
+                    Session Details
+                </h2>
+
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                    Review the Session schedule and
+                    join the live meeting.
+                </p>
+            </div>
+
+            {sessionHasEnded ? (
+                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
+                    <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        Session completed
+                    </p>
+                    <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                        This session has already ended. You can no longer join this meeting.
+                    </p>
+                </div>
+            ) : session.meeting_url ? (
+                <a
+                    href={session.meeting_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-orange)] px-5 py-3 text-sm font-bold text-white sm:w-auto"
+                >
+                    <Video className="w-4 h-4" />
+                    Join Google Meet
+                </a>
+            ) : (
+                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5 text-sm text-[var(--color-text-muted)]">
+                    Meeting link has not been published yet.
+                </div>
+            )}
+        </div>
+    );
+
+    const resourcesContent = (
+        <div className="space-y-5">
+            <div>
+                <h2 className="text-lg font-bold">
+                    Session Resources
+                </h2>
+
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                    Materials shared by the Admin for this
+                    Session.
+                </p>
+            </div>
+
+            {resourcesLoading && (
+                <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
+                    Loading resources...
+                </div>
+            )}
+
+            {resourcesError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    {resourcesError}
+                </div>
+            )}
+
+            {!resourcesLoading &&
+                !resourcesError &&
+                resources.length === 0 && (
+                    <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
+                        No resources have been added for this
+                        Session yet.
+                    </div>
+                )}
+
+            {!resourcesLoading &&
+                resources.length > 0 && (
+                    <div className="space-y-3">
+                        {resources.map((resource) => (
+                            <div
+                                key={resource.id}
+                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border-default)] p-4"
+                            >
+                                <div className="min-w-0">
+                                    <div className="text-sm font-bold text-[var(--color-text-primary)]">
+                                        {resource.title}
+                                    </div>
+
+                                    {resource.subtitle && (
+                                        <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                                            {resource.subtitle}
+                                        </div>
+                                    )}
+
+                                    <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--color-text-muted)] mt-2">
+                                        {resource.resource_type}
+                                    </div>
+                                </div>
+
+                                {resource.url && (
+                                    <a
+                                        href={resource.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] px-4 py-2 text-xs font-bold hover:border-[var(--color-brand-blue)] sm:w-auto"
+                                    >
+                                        {resource.is_downloadable
+                                            ? "Download"
+                                            : "Open Resource"}
+                                    </a>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+        </div>
+    );
+
+    const recordingContent = (
+        <div className="space-y-5">
+            <div>
+                <h2 className="text-lg font-bold">
+                    Recording & Transcript
+                </h2>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
+                    <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                        Recording
+                    </div>
+                    {session.recording_url ? (
+                        <a
+                            href={session.recording_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 break-all text-sm font-semibold text-[var(--color-brand-blue)]"
+                        >
+                            <PlayCircle className="h-4 w-4 shrink-0" />
+                            Watch Recording
+                        </a>
+                    ) : (
+                        <p className="text-sm text-[var(--color-text-muted)]">
+                            Recording is not available yet.
+                        </p>
+                    )}
+                </div>
+
+                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
+                    <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                        Transcript
+                    </div>
+                    {session.transcript_url ? (
+                        <a
+                            href={session.transcript_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm font-semibold text-[var(--color-brand-blue)]"
+                        >
+                            Open Transcript
+                        </a>
+                    ) : (
+                        <p className="text-sm text-[var(--color-text-muted)]">
+                            Transcript is not available yet.
+                        </p>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+
+    const submissionContent = (
+        <div className="space-y-5">
+            <div>
+                <h2 className="text-lg font-bold">
+                    Team Submission
+                </h2>
+
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                    Submit your Team&apos;s Google Drive work link for this Session.
+                </p>
+            </div>
+
+            {!session.submission_enabled && (
+                <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
+                    No submission is required for this Session.
+                </div>
+            )}
+
+            {session.submission_enabled &&
+                submissionLoading && (
+                    <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
+                        Loading Team submission...
+                    </div>
+                )}
+
+            {session.submission_enabled &&
+                submissionError && (
+                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                        {submissionError}
+                    </div>
+                )}
+
+            {session.submission_enabled &&
+                !submissionLoading &&
+                submissionData && (
+                    <div className="space-y-5">
+
+                        {submissionData.submission && (
+                            <div className="rounded-xl border border-[var(--color-border-default)] p-5">
+                                <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                    Current Submission
+                                </div>
+
+                                <a
+                                    href={
+                                        submissionData.submission.drive_url
+                                    }
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block mt-2 text-sm font-bold text-[var(--color-brand-blue)]"
+                                >
+                                    Open Submitted Drive Link
+                                </a>
+
+                                <div className="text-xs text-[var(--color-text-muted)] mt-2">
+                                    Last submitted{" "}
+                                    {new Date(
+                                        submissionData.submission.submitted_at
+                                    ).toLocaleString()}
+                                </div>
+                            </div>
+                        )}
+
+                        {!submissionData.submission &&
+                            !submissionData.can_submit && (
+                                <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
+                                    Your Team Lead has not submitted work yet.
+                                </div>
+                            )}
+
+                        {submissionData.can_submit ? (
+                            <div className="rounded-xl border border-[var(--color-border-default)] p-5 space-y-4">
+
+                                <div>
+                                    <label className="block text-sm font-bold mb-2">
+                                        Google Drive Submission Link
+                                    </label>
+
+                                    <input
+                                        type="url"
+                                        value={submissionUrl}
+                                        onChange={(event) =>
+                                            setSubmissionUrl(
+                                                event.target.value
+                                            )
+                                        }
+                                        placeholder="https://drive.google.com/..."
+                                        className="min-h-11 w-full rounded-xl border border-[var(--color-border-default)] px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-blue)]"
+                                    />
+                                </div>
+
+                                <Button
+                                    type="button"
+                                    onClick={handleSubmissionSave}
+                                    disabled={
+                                        submissionSaving ||
+                                        !submissionUrl.trim()
+                                    }
+                                >
+                                    {submissionSaving
+                                        ? "Saving..."
+                                        : submissionData.submission
+                                            ? "Resubmit"
+                                            : "Submit"}
+                                </Button>
+
+                                <p className="text-xs text-[var(--color-text-muted)]">
+                                    Only the Team Lead can submit or resubmit work.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="text-xs text-[var(--color-text-muted)]">
+                                Only the Team Lead can submit or resubmit work. Team members can view the submitted link.
+                            </div>
+                        )}
+                    </div>
+                )}
+        </div>
+    );
+
+    const feedbackContent = (
+        <div className="space-y-5">
+
+            <div>
+                <h2 className="text-lg font-bold">
+                    Feedback
+                </h2>
+
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                    Review feedback provided for your Team&apos;s submission.
+                </p>
+            </div>
+
+
+            {feedbackLoading && (
+                <div className="rounded-2xl border border-[var(--color-border-default)] p-8 text-center text-sm text-[var(--color-text-muted)]">
+                    Loading feedback...
+                </div>
+            )}
+
+
+            {feedbackError && (
+                <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    {feedbackError}
+                </div>
+            )}
+
+
+            {!feedbackLoading &&
+                !feedbackError &&
+                !feedback && (
+                    <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-6">
+
+                        <h3 className="text-sm font-bold">
+                            No feedback yet
+                        </h3>
+
+                        <p className="text-sm text-[var(--color-text-muted)] mt-2">
+                            Your Team&apos;s submission has not been reviewed yet.
+                        </p>
+
+                    </div>
+                )}
+
+
+            {!feedbackLoading &&
+                !feedbackError &&
+                feedback && (
+                    <div className="rounded-2xl border border-[var(--color-border-default)] overflow-hidden">
+
+                        <div className="flex flex-col gap-4 border-b border-[var(--color-border-default)] p-5 sm:flex-row sm:items-center sm:justify-between">
+
+                            <div>
+                                <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                                    Review Status
+                                </div>
+
+                                <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                                    Updated{" "}
+                                    {new Date(
+                                        feedback.updated_at
+                                    ).toLocaleString()}
+                                </div>
+                            </div>
+
+
+                            {feedback.status ===
+                                "accepted" ? (
+                                <span className="inline-flex px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                                    Accepted
+                                </span>
+                            ) : (
+                                <span className="inline-flex px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">
+                                    Revision Required
+                                </span>
+                            )}
+
+                        </div>
+
+
+                        <div className="p-5 space-y-5">
+
+                            <div>
+                                <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
+                                    Admin Feedback
+                                </div>
+
+                                <p className="text-sm text-[var(--color-text-body)] whitespace-pre-wrap leading-6">
+                                    {feedback.feedback_text}
+                                </p>
+                            </div>
+
+
+                            {feedback.feedback_url && (
+                                <div className="pt-4 border-t border-[var(--color-border-default)]">
+
+                                    <a
+                                        href={
+                                            feedback.feedback_url
+                                        }
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-[var(--color-brand-blue)] px-4 py-2 text-xs font-bold text-white sm:w-auto"
+                                    >
+                                        Open Feedback / Reference Link
+                                    </a>
+
+                                </div>
+                            )}
+
+                        </div>
+
+                    </div>
+                )}
+
+        </div>
+    );
+
+    // Map tab key → shared content block
+    const tabContentMap: Record<Tab, React.ReactNode> = {
+        overview: overviewContent,
+        resources: resourcesContent,
+        recording: recordingContent,
+        submission: submissionContent,
+        feedback: feedbackContent,
+    };
+
     return (
         <PortalShell
             breadcrumbItems={[
@@ -465,8 +910,9 @@ function SessionWorkspaceContent() {
                     Back to Sessions
                 </Link>
 
+                {/* ── Session header (shared on all viewports) ── */}
                 <div className="overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-white">
-                    <div className="border-b border-[var(--color-border-default)] p-5 sm:p-6 lg:p-8">
+                    <div className="p-5 sm:p-6 lg:p-8 sm:border-b sm:border-[var(--color-border-default)]">
                         <div className="text-xs font-extrabold uppercase tracking-wider text-[var(--color-brand-orange)]">
                             Session {session.session_number}
                         </div>
@@ -494,20 +940,21 @@ function SessionWorkspaceContent() {
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto border-b border-[var(--color-border-default)] [scrollbar-width:thin]">
-                        <div className="flex min-w-max px-2 sm:px-4">
+                    {/* ────────────────────────────────────────────────────
+                        DESKTOP TAB BAR (sm and above) — unchanged
+                    ──────────────────────────────────────────────────── */}
+                    <div className="hidden sm:block border-b border-[var(--color-border-default)]">
+                        <div className="flex overflow-x-auto [scrollbar-width:thin] px-4">
                             {tabs.map((tab) => {
                                 const Icon = tab.icon;
-
-                                const active =
-                                    activeTab === tab.key;
+                                const active = activeTab === tab.key;
 
                                 return (
                                     <button
                                         key={tab.key}
                                         type="button"
                                         onClick={() => selectTab(tab.key)}
-                                        className={`flex min-h-12 items-center gap-2 border-b-2 px-3 py-3 text-sm font-semibold whitespace-nowrap sm:px-4 ${active
+                                        className={`flex min-h-12 items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold whitespace-nowrap ${active
                                             ? "border-[var(--color-brand-orange)] text-[var(--color-text-primary)]"
                                             : "border-transparent text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
                                             }`}
@@ -520,413 +967,62 @@ function SessionWorkspaceContent() {
                         </div>
                     </div>
 
-                    <div className="p-5 sm:p-6 lg:p-8">
-                        {activeTab === "overview" && (
-                            <div className="space-y-6">
-                                <div>
-                                    <h2 className="text-lg font-bold">
-                                        Session Details
-                                    </h2>
-
-                                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                                        Review the Session schedule and
-                                        join the live meeting.
-                                    </p>
-                                </div>
-
-                                {sessionHasEnded ? (
-                                    <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
-                                        <p className="text-sm font-semibold text-[var(--color-text-primary)]">
-                                            Session completed
-                                        </p>
-                                        <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                                            This session has already ended. You can no longer join this meeting.
-                                        </p>
-                                    </div>
-                                ) : session.meeting_url ? (
-                                    <a
-                                        href={session.meeting_url}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-orange)] px-5 py-3 text-sm font-bold text-white sm:w-auto"
-                                    >
-                                        <Video className="w-4 h-4" />
-                                        Join Google Meet
-                                    </a>
-                                ) : (
-                                    <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5 text-sm text-[var(--color-text-muted)]">
-                                        Meeting link has not been published yet.
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {activeTab === "resources" && (
-                            <div className="space-y-5">
-                                <div>
-                                    <h2 className="text-lg font-bold">
-                                        Session Resources
-                                    </h2>
-
-                                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                                        Materials shared by the Admin for this
-                                        Session.
-                                    </p>
-                                </div>
-
-                                {resourcesLoading && (
-                                    <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
-                                        Loading resources...
-                                    </div>
-                                )}
-
-                                {resourcesError && (
-                                    <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                                        {resourcesError}
-                                    </div>
-                                )}
-
-                                {!resourcesLoading &&
-                                    !resourcesError &&
-                                    resources.length === 0 && (
-                                        <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
-                                            No resources have been added for this
-                                            Session yet.
-                                        </div>
-                                    )}
-
-                                {!resourcesLoading &&
-                                    resources.length > 0 && (
-                                        <div className="space-y-3">
-                                            {resources.map((resource) => (
-                                                <div
-                                                    key={resource.id}
-                                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-[var(--color-border-default)] p-4"
-                                                >
-                                                    <div className="min-w-0">
-                                                        <div className="text-sm font-bold text-[var(--color-text-primary)]">
-                                                            {resource.title}
-                                                        </div>
-
-                                                        {resource.subtitle && (
-                                                            <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                                                                {resource.subtitle}
-                                                            </div>
-                                                        )}
-
-                                                        <div className="text-[10px] uppercase tracking-wider font-bold text-[var(--color-text-muted)] mt-2">
-                                                            {resource.resource_type}
-                                                        </div>
-                                                    </div>
-
-                                                    {resource.url && (
-                                                        <a
-                                                            href={resource.url}
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] px-4 py-2 text-xs font-bold hover:border-[var(--color-brand-blue)] sm:w-auto"
-                                                        >
-                                                            {resource.is_downloadable
-                                                                ? "Download"
-                                                                : "Open Resource"}
-                                                        </a>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                            </div>
-                        )}
-                        {activeTab === "recording" && (
-                            <div className="space-y-5">
-                                <div>
-                                    <h2 className="text-lg font-bold">
-                                        Recording & Transcript
-                                    </h2>
-                                </div>
-
-                                <div className="grid gap-3 sm:grid-cols-2">
-                                    <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
-                                        <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                            Recording
-                                        </div>
-                                        {session.recording_url ? (
-                                            <a
-                                                href={session.recording_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-2 break-all text-sm font-semibold text-[var(--color-brand-blue)]"
-                                            >
-                                                <PlayCircle className="h-4 w-4 shrink-0" />
-                                                Watch Recording
-                                            </a>
-                                        ) : (
-                                            <p className="text-sm text-[var(--color-text-muted)]">
-                                                Recording is not available yet.
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
-                                        <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                            Transcript
-                                        </div>
-                                        {session.transcript_url ? (
-                                            <a
-                                                href={session.transcript_url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-sm font-semibold text-[var(--color-brand-blue)]"
-                                            >
-                                                Open Transcript
-                                            </a>
-                                        ) : (
-                                            <p className="text-sm text-[var(--color-text-muted)]">
-                                                Transcript is not available yet.
-                                            </p>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {activeTab === "submission" && (
-                            <div className="space-y-5">
-                                <div>
-                                    <h2 className="text-lg font-bold">
-                                        Team Submission
-                                    </h2>
-
-                                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                                        Submit your Team&apos;s Google Drive work link for this Session.
-                                    </p>
-                                </div>
-
-                                {!session.submission_enabled && (
-                                    <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
-                                        No submission is required for this Session.
-                                    </div>
-                                )}
-
-                                {session.submission_enabled &&
-                                    submissionLoading && (
-                                        <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
-                                            Loading Team submission...
-                                        </div>
-                                    )}
-
-                                {session.submission_enabled &&
-                                    submissionError && (
-                                        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                                            {submissionError}
-                                        </div>
-                                    )}
-
-                                {session.submission_enabled &&
-                                    !submissionLoading &&
-                                    submissionData && (
-                                        <div className="space-y-5">
-
-                                            {submissionData.submission && (
-                                                <div className="rounded-xl border border-[var(--color-border-default)] p-5">
-                                                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                                        Current Submission
-                                                    </div>
-
-                                                    <a
-                                                        href={
-                                                            submissionData.submission.drive_url
-                                                        }
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="inline-block mt-2 text-sm font-bold text-[var(--color-brand-blue)]"
-                                                    >
-                                                        Open Submitted Drive Link
-                                                    </a>
-
-                                                    <div className="text-xs text-[var(--color-text-muted)] mt-2">
-                                                        Last submitted{" "}
-                                                        {new Date(
-                                                            submissionData.submission.submitted_at
-                                                        ).toLocaleString()}
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {!submissionData.submission &&
-                                                !submissionData.can_submit && (
-                                                    <div className="rounded-xl border border-[var(--color-border-default)] p-5 text-sm text-[var(--color-text-muted)]">
-                                                        Your Team Lead has not submitted work yet.
-                                                    </div>
-                                                )}
-
-                                            {submissionData.can_submit ? (
-                                                <div className="rounded-xl border border-[var(--color-border-default)] p-5 space-y-4">
-
-                                                    <div>
-                                                        <label className="block text-sm font-bold mb-2">
-                                                            Google Drive Submission Link
-                                                        </label>
-
-                                                        <input
-                                                            type="url"
-                                                            value={submissionUrl}
-                                                            onChange={(event) =>
-                                                                setSubmissionUrl(
-                                                                    event.target.value
-                                                                )
-                                                            }
-                                                            placeholder="https://drive.google.com/..."
-                                                            className="min-h-11 w-full rounded-xl border border-[var(--color-border-default)] px-4 py-3 text-sm outline-none focus:border-[var(--color-brand-blue)]"
-                                                        />
-                                                    </div>
-
-                                                    <Button
-                                                        type="button"
-                                                        onClick={handleSubmissionSave}
-                                                        disabled={
-                                                            submissionSaving ||
-                                                            !submissionUrl.trim()
-                                                        }
-                                                    >
-                                                        {submissionSaving
-                                                            ? "Saving..."
-                                                            : submissionData.submission
-                                                                ? "Resubmit"
-                                                                : "Submit"}
-                                                    </Button>
-
-                                                    <p className="text-xs text-[var(--color-text-muted)]">
-                                                        Only the Team Lead can submit or resubmit work.
-                                                    </p>
-                                                </div>
-                                            ) : (
-                                                <div className="text-xs text-[var(--color-text-muted)]">
-                                                    Only the Team Lead can submit or resubmit work. Team members can view the submitted link.
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                            </div>
-                        )}
-                        {activeTab === "feedback" && (
-                            <div className="space-y-5">
-
-                                <div>
-                                    <h2 className="text-lg font-bold">
-                                        Feedback
-                                    </h2>
-
-                                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                                        Review feedback provided for your Team&apos;s submission.
-                                    </p>
-                                </div>
-
-
-                                {feedbackLoading && (
-                                    <div className="rounded-2xl border border-[var(--color-border-default)] p-8 text-center text-sm text-[var(--color-text-muted)]">
-                                        Loading feedback...
-                                    </div>
-                                )}
-
-
-                                {feedbackError && (
-                                    <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                                        {feedbackError}
-                                    </div>
-                                )}
-
-
-                                {!feedbackLoading &&
-                                    !feedbackError &&
-                                    !feedback && (
-                                        <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-6">
-
-                                            <h3 className="text-sm font-bold">
-                                                No feedback yet
-                                            </h3>
-
-                                            <p className="text-sm text-[var(--color-text-muted)] mt-2">
-                                                Your Team&apos;s submission has not been reviewed yet.
-                                            </p>
-
-                                        </div>
-                                    )}
-
-
-                                {!feedbackLoading &&
-                                    !feedbackError &&
-                                    feedback && (
-                                        <div className="rounded-2xl border border-[var(--color-border-default)] overflow-hidden">
-
-                                            <div className="flex flex-col gap-4 border-b border-[var(--color-border-default)] p-5 sm:flex-row sm:items-center sm:justify-between">
-
-                                                <div>
-                                                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                                                        Review Status
-                                                    </div>
-
-                                                    <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                                                        Updated{" "}
-                                                        {new Date(
-                                                            feedback.updated_at
-                                                        ).toLocaleString()}
-                                                    </div>
-                                                </div>
-
-
-                                                {feedback.status ===
-                                                    "accepted" ? (
-                                                    <span className="inline-flex px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
-                                                        Accepted
-                                                    </span>
-                                                ) : (
-                                                    <span className="inline-flex px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold">
-                                                        Revision Required
-                                                    </span>
-                                                )}
-
-                                            </div>
-
-
-                                            <div className="p-5 space-y-5">
-
-                                                <div>
-                                                    <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
-                                                        Admin Feedback
-                                                    </div>
-
-                                                    <p className="text-sm text-[var(--color-text-body)] whitespace-pre-wrap leading-6">
-                                                        {feedback.feedback_text}
-                                                    </p>
-                                                </div>
-
-
-                                                {feedback.feedback_url && (
-                                                    <div className="pt-4 border-t border-[var(--color-border-default)]">
-
-                                                        <a
-                                                            href={
-                                                                feedback.feedback_url
-                                                            }
-                                                            target="_blank"
-                                                            rel="noopener noreferrer"
-                                                            className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-[var(--color-brand-blue)] px-4 py-2 text-xs font-bold text-white sm:w-auto"
-                                                        >
-                                                            Open Feedback / Reference Link
-                                                        </a>
-
-                                                    </div>
-                                                )}
-
-                                            </div>
-
-                                        </div>
-                                    )}
-
-                            </div>
-                        )}
+                    {/* Desktop tab content panel */}
+                    <div className="hidden sm:block p-6 lg:p-8">
+                        {tabContentMap[activeTab]}
                     </div>
+                </div>
+
+                {/* ────────────────────────────────────────────────────
+                    MOBILE ACCORDION (below sm) — orange-bordered cards
+                    Each card is independent; only one open at a time.
+                    Default: "overview" expanded on load.
+                ──────────────────────────────────────────────────── */}
+                <div className="sm:hidden space-y-3">
+                    {tabs.map((tab) => {
+                        const Icon = tab.icon;
+                        const isOpen = mobileOpenSection === tab.key;
+
+                        return (
+                            <div
+                                key={tab.key}
+                                className={`rounded-2xl bg-white overflow-hidden transition-all duration-200 ${isOpen
+                                    ? "border-2 border-[var(--color-brand-orange)] shadow-xs"
+                                    : "border border-[var(--color-brand-orange)]/60 hover:border-[var(--color-brand-orange)]"
+                                    }`}
+                            >
+                                {/* Accordion header button */}
+                                <button
+                                    type="button"
+                                    aria-expanded={isOpen}
+                                    onClick={() => toggleMobileSection(tab.key)}
+                                    className="flex w-full min-h-[52px] items-center gap-3 px-4 py-3.5 text-left transition-colors active:bg-[var(--color-bg-subtle)]"
+                                >
+                                    <Icon
+                                        className="w-4 h-4 shrink-0 text-[var(--color-brand-orange)]"
+                                    />
+                                    <span
+                                        className="flex-1 text-sm font-semibold text-[var(--color-text-primary)]"
+                                    >
+                                        {tab.label}
+                                    </span>
+                                    <ChevronDown
+                                        className={`w-4 h-4 shrink-0 transition-transform duration-200 ease-in-out ${isOpen
+                                            ? "rotate-180 text-[var(--color-brand-orange)]"
+                                            : "rotate-0 text-[var(--color-text-muted)]"
+                                            }`}
+                                    />
+                                </button>
+
+                                {/* Accordion body — rendered when open */}
+                                {isOpen && (
+                                    <div className="border-t border-[var(--color-border-default)] px-4 py-5">
+                                        {tabContentMap[tab.key]}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         </PortalShell>

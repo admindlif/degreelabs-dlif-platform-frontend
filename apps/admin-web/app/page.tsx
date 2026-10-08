@@ -882,13 +882,13 @@ export default function AdminHomePage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2 w-full md:w-auto">
+                <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 scrollbar-none">
                   {["all", "active", "invited", "suspended"].map((st) => (
                     <button
                       key={st}
                       type="button"
                       onClick={() => setStatusFilter(st)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-colors ${statusFilter === st
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-colors shrink-0 ${statusFilter === st
                         ? "bg-[var(--color-brand-navy)] text-white"
                         : "bg-[var(--color-bg-canvas)] text-[var(--color-text-body)] border border-[var(--color-border-default)] hover:border-[var(--color-border-strong)]"
                         }`}
@@ -1019,13 +1019,13 @@ export default function AdminHomePage() {
           {activeTab === "Phases" && (
             <div className="space-y-6">
 
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold">
                     Phases
                   </h2>
 
-                  <p className="text-xs text-[var(--color-text-muted)]">
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
                     Manage program phases such as DISCOVER.
                   </p>
                 </div>
@@ -1509,13 +1509,13 @@ export default function AdminHomePage() {
           {activeTab === "Teams" && (
             <div className="space-y-6">
 
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-extrabold tracking-tight">
                     Fellow Teams & Company Challenges
                   </h2>
 
-                  <p className="text-xs text-[var(--color-text-muted)]">
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">
                     Fellow team groupings and their assigned industry challenges.
                   </p>
                 </div>
@@ -2602,8 +2602,8 @@ export default function AdminHomePage() {
 
       {/* ── INVITE FELLOW MODAL ────────────────────────────────────────── */}
       {showInviteModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-6 max-w-md w-full shadow-2xl relative">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl relative max-h-[calc(100dvh-1.5rem)] overflow-y-auto">
             <button
               type="button"
               onClick={() => setShowInviteModal(false)}

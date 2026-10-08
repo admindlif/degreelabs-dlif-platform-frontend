@@ -164,7 +164,7 @@ export default function StudentLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-canvas)] flex flex-col justify-center items-center p-6 selection:bg-[var(--color-brand-orange)] selection:text-white">
+    <div className="min-h-screen bg-[var(--color-bg-canvas)] flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-[var(--color-brand-orange)] selection:text-white">
       {/* Background radial accent glow */}
       <div className="fixed inset-0 pointer-events-none flex items-center justify-center opacity-30">
         <div className="w-[500px] h-[500px] bg-gradient-to-tr from-amber-500/10 via-orange-500/5 to-transparent rounded-full blur-3xl" />
@@ -202,7 +202,7 @@ export default function StudentLoginPage() {
         </div>
 
         {/* Card */}
-        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-7 shadow-xl backdrop-blur-sm">
+        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-7 shadow-xl backdrop-blur-sm">
           {error && (
             <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />

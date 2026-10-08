@@ -133,9 +133,9 @@ export function CohortFellowsModal({
     }
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
 
-            <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-6 w-full max-w-2xl shadow-2xl max-h-[85vh] overflow-y-auto">
+            <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-6 w-full max-w-2xl shadow-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[85vh] overflow-y-auto">
 
                 <div className="flex items-center justify-between mb-5">
                     <div>
@@ -177,7 +177,7 @@ export function CohortFellowsModal({
                             return (
                                 <div
                                     key={fellow.id}
-                                    className="flex items-center justify-between gap-4 p-4 rounded-xl border border-[var(--color-border-default)]"
+                                    className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-[var(--color-border-default)]"
                                 >
                                     <div>
                                         <div className="font-bold text-sm">

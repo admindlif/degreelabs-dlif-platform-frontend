@@ -339,7 +339,7 @@ function StudentActivationContent() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-bg-canvas)] flex flex-col justify-center items-center p-6 selection:bg-[var(--color-brand-orange)] selection:text-white">
+    <div className="min-h-screen bg-[var(--color-bg-canvas)] flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-[var(--color-brand-orange)] selection:text-white">
       <div className="w-full max-w-xl relative z-10">
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-6">
@@ -365,7 +365,7 @@ function StudentActivationContent() {
         <StepIndicator currentStep={step} />
 
         {/* Card */}
-        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-7 shadow-xl">
+        <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-7 shadow-xl">
           {error && (
             <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -521,7 +521,7 @@ function StudentActivationContent() {
                 />
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <button
                   type="button"
                   onClick={() => setStep(2)}
