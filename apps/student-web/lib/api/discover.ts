@@ -7,6 +7,8 @@ import {
   SessionSummary,
   SessionSubmissionResponse,
   SubmissionFeedback,
+  SessionRecordingResponse,
+  SessionTranscriptResponse,
 } from "./types";
 
 export async function getDiscoverOverview(): Promise<DiscoverOverview> {
@@ -66,3 +68,20 @@ export async function getSessionFeedback(
     `/api/v1/fellow/sessions/${sessionId}/feedback`
   );
 }
+
+export async function getSessionRecording(
+  sessionId: string
+): Promise<SessionRecordingResponse> {
+  return apiClient<SessionRecordingResponse>(
+    `/api/v1/fellow/sessions/${sessionId}/recording`
+  );
+}
+
+export async function getSessionTranscript(
+  sessionId: string
+): Promise<SessionTranscriptResponse> {
+  return apiClient<SessionTranscriptResponse>(
+    `/api/v1/fellow/sessions/${sessionId}/transcript`
+  );
+}
+

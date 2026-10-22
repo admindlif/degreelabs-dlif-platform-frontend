@@ -45,16 +45,30 @@ function weekSectionKey(week: DiscoverWeek) {
   return `week-${week.id}`;
 }
 
-function weekVisualState(week: DiscoverWeek): SectionVisualState {
-  if (week.status === "active") return "current";
-  if (week.status === "completed") return "completed";
+function weekVisualState(
+  week: DiscoverWeek,
+  completedSessions: number,
+  totalSessions: number
+): SectionVisualState {
+  if (totalSessions > 0 && completedSessions === totalSessions) {
+    return "completed";
+  }
+  if (week.status === "active" || completedSessions > 0) return "current";
   if (week.status === "locked") return "locked";
   return "upcoming";
 }
 
-function weekStatusLabel(week: DiscoverWeek) {
-  if (week.status === "active") return "Current";
-  if (week.status === "completed") return "Completed";
+function weekStatusLabel(
+  week: DiscoverWeek,
+  completedSessions: number,
+  totalSessions: number
+) {
+  if (totalSessions > 0 && completedSessions === totalSessions) {
+    return "Completed";
+  }
+  if (completedSessions > 0 || week.status === "active") {
+    return "In Progress";
+  }
   if (week.status === "locked") return "Locked";
   return week.status_badge || "Upcoming";
 }
@@ -571,8 +585,8 @@ export function Sidebar({
                   number={String(week.week_number).padStart(2, "0")}
                   label={`Week ${week.week_number}`}
                   title={week.title}
-                  statusLabel={weekStatusLabel(week)}
-                  state={weekVisualState(week)}
+                  statusLabel={weekStatusLabel(week, completedSessions, sessions.length)}
+                  state={weekVisualState(week, completedSessions, sessions.length)}
                   completion={`${completedSessions}/${sessions.length} done`}
                   expanded={expanded}
                   onToggle={() => toggleSection(sectionKey)}

@@ -17,6 +17,7 @@ import {
 
 import { PortalShell } from "@/components/layout/portal-shell";
 import { Button } from "@/components/ui/button";
+import { SessionRecordingTab } from "@/components/recording/session-recording-tab";
 import { ApiError } from "@/lib/api/client";
 import {
     getSessionDetail,
@@ -593,56 +594,12 @@ function SessionWorkspaceContent() {
     );
 
     const recordingContent = (
-        <div className="space-y-5">
-            <div>
-                <h2 className="text-lg font-bold">
-                    Recording & Transcript
-                </h2>
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
-                    <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                        Recording
-                    </div>
-                    {session.recording_url ? (
-                        <a
-                            href={session.recording_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-2 break-all text-sm font-semibold text-[var(--color-brand-blue)]"
-                        >
-                            <PlayCircle className="h-4 w-4 shrink-0" />
-                            Watch Recording
-                        </a>
-                    ) : (
-                        <p className="text-sm text-[var(--color-text-muted)]">
-                            Recording is not available yet.
-                        </p>
-                    )}
-                </div>
-
-                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-5">
-                    <div className="mb-3 text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
-                        Transcript
-                    </div>
-                    {session.transcript_url ? (
-                        <a
-                            href={session.transcript_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-sm font-semibold text-[var(--color-brand-blue)]"
-                        >
-                            Open Transcript
-                        </a>
-                    ) : (
-                        <p className="text-sm text-[var(--color-text-muted)]">
-                            Transcript is not available yet.
-                        </p>
-                    )}
-                </div>
-            </div>
-        </div>
+        <SessionRecordingTab
+            sessionId={session.id}
+            sessionTitle={session.title}
+            legacyRecordingUrl={session.recording_url}
+            legacyTranscriptUrl={session.transcript_url}
+        />
     );
 
     const submissionContent = (

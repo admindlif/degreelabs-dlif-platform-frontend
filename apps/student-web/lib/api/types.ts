@@ -243,3 +243,46 @@ export interface ChecklistRemindersResponse {
   total_count: number;
   reminders: ChecklistReminderItem[];
 }
+
+// --- Phase 3: tl;dv Recording & Transcript Integration ---
+
+export type RecordingStatus =
+  | "ready"
+  | "processing"
+  | "unavailable"
+  | "failed"
+  | string;
+
+export interface SessionRecordingResponse {
+  session_id: string;
+  has_recording: boolean;
+  status: RecordingStatus;
+  playback_url: string | null;
+  duration_seconds: number | null;
+  expires_at: string | null;
+  provider: "tldv" | "legacy" | string | null;
+}
+
+export interface TranscriptSegment {
+  speaker: string | null;
+  text: string;
+  start_time: number;
+  end_time: number | null;
+}
+
+export type TranscriptStatus =
+  | "ready"
+  | "processing"
+  | "unavailable"
+  | "failed"
+  | string;
+
+export interface SessionTranscriptResponse {
+  session_id: string;
+  has_transcript: boolean;
+  status: TranscriptStatus;
+  segments: TranscriptSegment[];
+  full_text: string | null;
+  provider: "tldv" | "legacy" | string | null;
+}
+
