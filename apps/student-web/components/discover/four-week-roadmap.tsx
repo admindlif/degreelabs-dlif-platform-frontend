@@ -109,10 +109,34 @@ export function FourWeekRoadmap({ weeks }: FourWeekRoadmapProps) {
   const displayWeeks: DisplayWeek[] = React.useMemo(() => {
     if (weeks && weeks.length > 0) {
       return weeks.map((w) => {
+        const nonInductionSessions = w.sessions.filter(
+          (s) => s.session_number !== 0
+        );
+        const totalNonInduction = nonInductionSessions.length;
+        const completedSessionsCount = nonInductionSessions.filter(
+          (s) => s.status === "completed"
+        ).length;
+        const allCompleted =
+          totalNonInduction > 0 && completedSessionsCount === totalNonInduction;
+
+        const effectiveStatus: DisplayWeek["status"] = allCompleted
+          ? "completed"
+          : (w.status === "active" || completedSessionsCount > 0)
+            ? "active"
+            : (w.status as DisplayWeek["status"]) || "locked";
+
+        const effectiveBadge = allCompleted
+          ? "Completed"
+          : (w.status === "active" || completedSessionsCount > 0)
+            ? (w.status_badge && w.status_badge.includes("In Progress")
+                ? w.status_badge
+                : "In Progress")
+            : w.status_badge;
+
         const badgeVariant: "brand" | "blue" | "muted" =
-          w.status === "active"
+          effectiveStatus === "active"
             ? "brand"
-            : w.status === "upcoming"
+            : effectiveStatus === "upcoming"
               ? "blue"
               : "muted";
 
@@ -160,8 +184,8 @@ export function FourWeekRoadmap({ weeks }: FourWeekRoadmapProps) {
         return {
           weekNumber: `WEEK ${String(w.week_number).padStart(2, "0")}`,
           title: w.title,
-          status: (w.status as DisplayWeek["status"]) || "locked",
-          statusBadge: w.status_badge,
+          status: effectiveStatus,
+          statusBadge: effectiveBadge,
           statusBadgeVariant: badgeVariant,
           description: w.description || "",
           sessions: mappedSessions,
