@@ -84,6 +84,7 @@ import { CohortFellowsModal } from "@/components/admin/cohort-fellows-modal";
 import { TeamMembersModal } from "@/components/admin/team-members-modal";
 import { SubmissionFeedbackModal } from "@/components/admin/submission-feedback-modal";
 import { TeamChallengeResourcesModal } from "@/components/admin/team-challenge-resources-modal";
+import { TeamPhaseAccessModal } from "@/components/admin/team-phase-access-modal";
 import { ChecklistItemModal } from "@/components/admin/checklist-item-modal";
 
 type NavTab =
@@ -184,6 +185,12 @@ export default function AdminHomePage() {
     React.useState(false);
 
   const [selectedTeamForChallengeResources, setSelectedTeamForChallengeResources] =
+    React.useState<AdminTeam | null>(null);
+
+  const [showTeamPhaseAccessModal, setShowTeamPhaseAccessModal] =
+    React.useState(false);
+
+  const [selectedTeamForPhaseAccess, setSelectedTeamForPhaseAccess] =
     React.useState<AdminTeam | null>(null);
 
   const [showTeamModal, setShowTeamModal] =
@@ -1605,6 +1612,17 @@ export default function AdminHomePage() {
                           <button
                             type="button"
                             onClick={() => {
+                              setSelectedTeamForPhaseAccess(t);
+                              setShowTeamPhaseAccessModal(true);
+                            }}
+                            className="px-3 py-2 rounded-lg border border-[var(--color-border-default)] text-xs font-bold hover:border-[var(--color-brand-orange)] hover:text-[var(--color-brand-orange)]"
+                          >
+                            Phase Access
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => {
                               setSelectedTeamForMembers(t);
                               setShowTeamMembersModal(true);
                             }}
@@ -2850,6 +2868,19 @@ export default function AdminHomePage() {
             }}
           />
         )}
+
+      {showTeamPhaseAccessModal && selectedTeamForPhaseAccess && (
+        <TeamPhaseAccessModal
+          team={selectedTeamForPhaseAccess}
+          onClose={() => {
+            setShowTeamPhaseAccessModal(false);
+            setSelectedTeamForPhaseAccess(null);
+          }}
+          onChanged={async () => {
+            await loadData();
+          }}
+        />
+      )}
 
 
       {showTeamModal && (
