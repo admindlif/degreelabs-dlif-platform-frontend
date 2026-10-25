@@ -3,7 +3,7 @@
 import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Shield, Lock, Mail, KeyRound, AlertCircle, ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api/config";
@@ -32,9 +32,12 @@ function requiresTwoFactor(data: unknown): boolean | null {
   return null;
 }
 
-export default function StudentLoginPage() {
+function StudentLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { refreshUser } = useAuth();
+
+  const sessionExpired = searchParams.get("session_expired") === "1";
 
   // Stage: 1 = Email + Password, 2 = 2FA TOTP / Recovery Code
   const [stage, setStage] = React.useState<1 | 2>(1);
@@ -87,7 +90,7 @@ export default function StudentLoginPage() {
       if (needsTwoFactor === false) {
         const success = await refreshUser();
         if (success) {
-          router.push("/");
+          router.push("/home");
           return;
         } else {
           setError("Your account does not have Fellow access for this portal.");
@@ -146,7 +149,7 @@ export default function StudentLoginPage() {
 
       const success = await refreshUser();
       if (success) {
-        router.push("/");
+        router.push("/home");
       } else {
         setError(
           "Authentication succeeded, but your Fellow session could not be loaded. Please sign in again."
@@ -203,6 +206,13 @@ export default function StudentLoginPage() {
 
         {/* Card */}
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-7 shadow-xl backdrop-blur-sm">
+          {sessionExpired && !error && (
+            <div className="mb-5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Your session has expired. Please sign in again to continue.</span>
+            </div>
+          )}
+
           {error && (
             <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -354,5 +364,13 @@ export default function StudentLoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function StudentLoginPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <StudentLoginForm />
+    </React.Suspense>
   );
 }

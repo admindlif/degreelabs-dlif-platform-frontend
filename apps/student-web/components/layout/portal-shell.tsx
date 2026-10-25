@@ -12,6 +12,8 @@ interface PortalShellProps {
   breadcrumbItems?: string[];
   nextSession?: SessionSummary | null;
   context?: FellowContext | null;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function PortalShell({
@@ -19,6 +21,8 @@ export function PortalShell({
   breadcrumbItems = [],
   nextSession,
   context,
+  onRefresh,
+  isRefreshing,
 }: PortalShellProps) {
   const [loadedContext, setLoadedContext] =
     React.useState<FellowContext | null>(context ?? null);
@@ -77,6 +81,8 @@ export function PortalShell({
           roleTitle="Fellow Portal"
           nextSession={nextSession}
           onMenuClick={() => setMobileNavOpen(true)}
+          onRefresh={onRefresh}
+          isRefreshing={isRefreshing}
         />
         <main className="flex-1 w-full max-w-[1440px] mx-auto p-4 sm:p-6 lg:p-8 xl:p-10">
           {children}

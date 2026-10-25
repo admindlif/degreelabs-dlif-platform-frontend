@@ -13,6 +13,7 @@ import {
     removeTeamMember,
 } from "@/lib/api/admin";
 import { getErrorMessage } from "@/lib/api/client";
+import { FellowshipPhaseAccessControl } from "./fellowship-phase-access-control";
 
 interface TeamMembersModalProps {
     team: AdminTeam;
@@ -244,6 +245,10 @@ export function TeamMembersModal({
                     </div>
                 ) : (
                     <div className="space-y-8">
+                        <FellowshipPhaseAccessControl
+                            team={detail ?? team}
+                            onChanged={onChanged}
+                        />
 
                         {/* ================================================= */}
                         {/* CURRENT TEAM MEMBERS */}

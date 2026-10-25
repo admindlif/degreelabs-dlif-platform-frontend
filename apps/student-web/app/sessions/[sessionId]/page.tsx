@@ -138,19 +138,90 @@ function SessionWorkspaceContent() {
     const [mobileOpenSection, setMobileOpenSection] =
         React.useState<Tab | null>(activeTab || "overview");
 
-    const loadSession = React.useCallback(
-        async () => {
-            try {
-                const data = await getSessionDetail(
-                    sessionId
-                );
+    const [refreshing, setRefreshing] = React.useState(false);
+    const [lastRefreshedAt, setLastRefreshedAt] = React.useState<Date | null>(null);
+    const [recordingRefreshKey, setRecordingRefreshKey] = React.useState(0);
 
+    const loadSession = React.useCallback(
+        async (silent = false) => {
+            if (!silent) setLoading(true);
+            try {
+                const data = await getSessionDetail(sessionId);
                 setSession(data);
                 setError(null);
+                return data;
             } catch (err: unknown) {
                 setError(classifySessionLoadError(err));
+                return null;
             } finally {
-                setLoading(false);
+                if (!silent) setLoading(false);
+            }
+        },
+        [sessionId]
+    );
+
+    const loadResources = React.useCallback(
+        async (silent = false) => {
+            if (!sessionId) return;
+            if (!silent) setResourcesLoading(true);
+            setResourcesError(null);
+
+            try {
+                const data = await getSessionResources(sessionId);
+                setResources(data);
+                setResourcesLoaded(true);
+            } catch (err: unknown) {
+                setResourcesError(
+                    getErrorMessage(err, "Unable to load Session resources.")
+                );
+            } finally {
+                if (!silent) setResourcesLoading(false);
+            }
+        },
+        [sessionId]
+    );
+
+    const loadSubmission = React.useCallback(
+        async (silent = false, enabled?: boolean) => {
+            const isEnabled = enabled !== undefined ? enabled : session?.submission_enabled;
+            if (!sessionId || !isEnabled) return;
+            if (!silent) setSubmissionLoading(true);
+            setSubmissionError(null);
+
+            try {
+                const data = await getSessionSubmission(sessionId);
+                setSubmissionData(data);
+                if (data.submission?.drive_url) {
+                    setSubmissionUrl(data.submission.drive_url);
+                }
+                setSubmissionLoaded(true);
+            } catch (err: unknown) {
+                setSubmissionError(
+                    getErrorMessage(err, "Unable to load Team submission.")
+                );
+            } finally {
+                if (!silent) setSubmissionLoading(false);
+            }
+        },
+        [sessionId, session?.submission_enabled]
+    );
+
+    const loadFeedback = React.useCallback(
+        async (silent = false) => {
+            if (!sessionId) return;
+            if (!silent) setFeedbackLoading(true);
+            setFeedbackError(null);
+
+            try {
+                const data = await getSessionFeedback(sessionId);
+                setFeedback(data);
+                setFeedbackLoaded(true);
+            } catch (err: unknown) {
+                setFeedbackError(
+                    getErrorMessage(err, "Unable to load Team feedback.")
+                );
+            } finally {
+                if (!silent) setFeedbackLoading(false);
             }
         },
         [sessionId]
@@ -161,6 +232,56 @@ function SessionWorkspaceContent() {
         setError(null);
         void loadSession();
     }, [loadSession]);
+
+    const handleRefresh = React.useCallback(async () => {
+        if (refreshing || !sessionId) return;
+        setRefreshing(true);
+
+        try {
+            const sessionData = await loadSession(true);
+            const isSubmissionEnabled = sessionData?.submission_enabled ?? session?.submission_enabled;
+
+            const promises: Promise<unknown>[] = [];
+
+            // Always refresh resources whenever refresh is requested
+            promises.push(loadResources(true));
+
+            if (isSubmissionEnabled && (activeTab === "submission" || mobileOpenSection === "submission" || submissionLoaded)) {
+                promises.push(loadSubmission(true, isSubmissionEnabled));
+            }
+
+            if (activeTab === "feedback" || mobileOpenSection === "feedback" || feedbackLoaded) {
+                promises.push(loadFeedback(true));
+            }
+
+            if (activeTab === "recording" || mobileOpenSection === "recording") {
+                setRecordingRefreshKey((k) => k + 1);
+            }
+
+            if (promises.length > 0) {
+                await Promise.allSettled(promises);
+            }
+
+            setLastRefreshedAt(new Date());
+        } catch (err: unknown) {
+            console.error("Failed to refresh session data:", err);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [
+        refreshing,
+        sessionId,
+        loadSession,
+        session?.submission_enabled,
+        activeTab,
+        mobileOpenSection,
+        resourcesLoaded,
+        submissionLoaded,
+        feedbackLoaded,
+        loadResources,
+        loadSubmission,
+        loadFeedback,
+    ]);
 
     const selectTab = React.useCallback((tab: Tab) => {
         const nextSearchParams = new URLSearchParams(
@@ -215,40 +336,17 @@ function SessionWorkspaceContent() {
             activeTab === "resources" ||
             mobileOpenSection === "resources";
 
-        if (
-            !isNeeded ||
-            resourcesLoaded ||
-            !sessionId
-        ) {
+        if (!isNeeded || !sessionId) {
             return;
         }
 
-        async function loadResources() {
-            setResourcesLoading(true);
-            setResourcesError(null);
-
-            try {
-                const data = await getSessionResources(
-                    sessionId
-                );
-
-                setResources(data);
-                setResourcesLoaded(true);
-            } catch (err: unknown) {
-                setResourcesError(
-                    getErrorMessage(err, "Unable to load Session resources.")
-                );
-            } finally {
-                setResourcesLoading(false);
-            }
-        }
-
-        loadResources();
+        void loadResources(resourcesLoaded);
     }, [
         activeTab,
         mobileOpenSection,
         resourcesLoaded,
         sessionId,
+        loadResources,
     ]);
 
     React.useEffect(() => {
@@ -265,40 +363,14 @@ function SessionWorkspaceContent() {
             return;
         }
 
-        async function loadSubmission() {
-            setSubmissionLoading(true);
-            setSubmissionError(null);
-
-            try {
-                const data = await getSessionSubmission(
-                    sessionId
-                );
-
-                setSubmissionData(data);
-
-                if (data.submission?.drive_url) {
-                    setSubmissionUrl(
-                        data.submission.drive_url
-                    );
-                }
-
-                setSubmissionLoaded(true);
-            } catch (err: unknown) {
-                setSubmissionError(
-                    getErrorMessage(err, "Unable to load Team submission.")
-                );
-            } finally {
-                setSubmissionLoading(false);
-            }
-        }
-
-        loadSubmission();
+        void loadSubmission();
     }, [
         activeTab,
         mobileOpenSection,
         submissionLoaded,
         sessionId,
         session?.submission_enabled,
+        loadSubmission,
     ]);
 
     React.useEffect(() => {
@@ -306,44 +378,20 @@ function SessionWorkspaceContent() {
             activeTab === "feedback" ||
             mobileOpenSection === "feedback";
 
-        if (
-            !isNeeded ||
-            feedbackLoaded ||
-            !sessionId
-        ) {
+        if (!isNeeded || feedbackLoaded || !sessionId) {
             return;
         }
 
-        async function loadFeedback() {
-            setFeedbackLoading(true);
-            setFeedbackError(null);
-
-            try {
-                const data =
-                    await getSessionFeedback(
-                        sessionId
-                    );
-
-                setFeedback(data);
-                setFeedbackLoaded(true);
-            } catch (err: unknown) {
-                setFeedbackError(
-                    getErrorMessage(err, "Unable to load Team feedback.")
-                );
-            } finally {
-                setFeedbackLoading(false);
-            }
-        }
-
-        loadFeedback();
+        void loadFeedback();
     }, [
         activeTab,
         mobileOpenSection,
         feedbackLoaded,
         sessionId,
+        loadFeedback,
     ]);
 
-    if (loading) {
+    if (loading && !session) {
         return (
             <PortalShell breadcrumbItems={["Session"]}>
                 <div className="rounded-2xl border border-[var(--color-border-default)] py-16 text-center text-sm text-[var(--color-text-muted)]">
@@ -518,15 +566,29 @@ function SessionWorkspaceContent() {
 
     const resourcesContent = (
         <div className="space-y-5">
-            <div>
-                <h2 className="text-lg font-bold">
-                    Session Resources
-                </h2>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                    <h2 className="text-lg font-bold">
+                        Session Resources
+                    </h2>
 
-                <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                    Materials shared by the Admin for this
-                    Session.
-                </p>
+                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                        Materials shared by the Admin for this
+                        Session.
+                    </p>
+                </div>
+
+                <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => void loadResources()}
+                    disabled={resourcesLoading || refreshing}
+                    className="self-start sm:self-auto text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                >
+                    <RefreshCw className={`h-3.5 w-3.5 ${resourcesLoading ? "animate-spin text-[var(--color-brand-orange)]" : ""}`} />
+                    <span>{resourcesLoading ? "Refreshing..." : "Refresh Resources"}</span>
+                </Button>
             </div>
 
             {resourcesLoading && (
@@ -595,6 +657,7 @@ function SessionWorkspaceContent() {
 
     const recordingContent = (
         <SessionRecordingTab
+            key={`${session.id}-${recordingRefreshKey}`}
             sessionId={session.id}
             sessionTitle={session.title}
             legacyRecordingUrl={session.recording_url}
@@ -859,13 +922,35 @@ function SessionWorkspaceContent() {
             ]}
         >
             <div className="space-y-6">
-                <Link
-                    href="/sessions"
-                    className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
-                >
-                    <ArrowLeft className="w-4 h-4" />
-                    Back to Sessions
-                </Link>
+                <div className="flex items-center justify-between gap-4">
+                    <Link
+                        href="/sessions"
+                        className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                    >
+                        <ArrowLeft className="w-4 h-4" />
+                        Back to Sessions
+                    </Link>
+
+                    <div className="flex items-center gap-2.5">
+                        {lastRefreshedAt && (
+                            <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] font-medium">
+                                Updated {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        )}
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleRefresh}
+                            disabled={refreshing}
+                            className="h-9 gap-2 text-xs"
+                            title="Refresh session details, meeting link, and resources"
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-[var(--color-brand-orange)]" : ""}`} />
+                            <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+                        </Button>
+                    </div>
+                </div>
 
                 {/* ── Session header (shared on all viewports) ── */}
                 <div className="overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-white">

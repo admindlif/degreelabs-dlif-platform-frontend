@@ -1,4 +1,4 @@
-﻿import { adminApiClient } from "./client";
+import { adminApiClient } from "./client";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -250,6 +250,33 @@ export interface TeamChallengeResourceCreate {
   url: string;
   is_downloadable?: boolean;
   sequence?: number;
+}
+
+export type PhaseProgressionCode = "VALIDATE" | "GROW" | string;
+export type PhaseProgressionStatus = "unlocked" | "locked";
+export type PhaseProgressionDecision =
+  | "company_shortlisted"
+  | "paid_implementation_approved"
+  | "rejected"
+  | null;
+
+export interface TeamPhaseProgression {
+  id: string;
+  team_id: string;
+  cohort_id: string;
+  phase_code: PhaseProgressionCode;
+  status: PhaseProgressionStatus;
+  decision: PhaseProgressionDecision;
+  decided_at: string | null;
+  decided_by_user_id: string | null;
+  notes: string | null;
+}
+
+export interface TeamPhaseProgressionUpdate {
+  phase_code: "VALIDATE" | "GROW";
+  status: "unlocked" | "locked";
+  decision: "company_shortlisted" | "paid_implementation_approved" | "rejected";
+  notes?: string;
 }
 
 export interface AdminResource {
@@ -658,6 +685,27 @@ export async function assignTeamLead(
       body: JSON.stringify({
         user_id: userId,
       }),
+    }
+  );
+}
+
+export async function getTeamPhaseProgression(
+  teamId: string
+): Promise<TeamPhaseProgression[]> {
+  return adminApiClient<TeamPhaseProgression[]>(
+    `/api/v1/admin/teams/${teamId}/phase-progression`
+  );
+}
+
+export async function updateTeamPhaseProgression(
+  teamId: string,
+  data: TeamPhaseProgressionUpdate
+): Promise<TeamPhaseProgression> {
+  return adminApiClient<TeamPhaseProgression>(
+    `/api/v1/admin/teams/${teamId}/phase-progression`,
+    {
+      method: "PUT",
+      body: JSON.stringify(data),
     }
   );
 }

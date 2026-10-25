@@ -27,6 +27,7 @@ export async function apiClient<T>(
   const url = `${base}${path}`;
 
   const res = await fetch(url, {
+    cache: "no-store",
     ...options,
     credentials: "include",
     headers,
@@ -39,6 +40,21 @@ export async function apiClient<T>(
     } catch {
       // ignore
     }
+
+    // 401 → the fellow's session cookie has expired or was invalidated.
+    // Redirect to login so they can re-authenticate without having to
+    // manually log out and back in.
+    if (res.status === 401) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?session_expired=1";
+      }
+      throw new ApiError(
+        "Your session has expired. Please sign in again.",
+        res.status,
+        errorData
+      );
+    }
+
     const detail =
       typeof errorData === "object" &&
       errorData !== null &&

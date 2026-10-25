@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { ChevronRight, Menu } from "lucide-react";
+import { ChevronRight, Menu, RefreshCw } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { SessionSummary } from "@/lib/api/types";
 import { NotificationPopover } from "./notification-popover";
@@ -11,6 +12,8 @@ interface TopbarProps {
   roleTitle?: string;
   nextSession?: SessionSummary | null;
   onMenuClick?: () => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 export function Topbar({
@@ -18,7 +21,24 @@ export function Topbar({
   roleTitle = "Fellow Portal",
   nextSession,
   onMenuClick,
+  onRefresh,
+  isRefreshing: isRefreshingProp,
 }: TopbarProps) {
+  const router = useRouter();
+  const [internalRefreshing, setInternalRefreshing] = React.useState(false);
+
+  const isRefreshing = isRefreshingProp ?? internalRefreshing;
+
+  const handleRefresh = React.useCallback(() => {
+    if (isRefreshing) return;
+    if (onRefresh) {
+      onRefresh();
+    } else {
+      setInternalRefreshing(true);
+      router.refresh();
+      setTimeout(() => setInternalRefreshing(false), 600);
+    }
+  }, [isRefreshing, onRefresh, router]);
   const nextSessionLabel = nextSession
     ? nextSession.status === "live"
       ? `Live Now: Session ${nextSession.session_number}`
@@ -70,6 +90,22 @@ export function Topbar({
             </span>
           </div>
         )}
+
+        {/* Refresh button */}
+        <button
+          type="button"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          aria-label="Refresh page"
+          title="Refresh"
+          className="relative flex h-9 w-9 items-center justify-center rounded-full border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] text-[var(--color-text-secondary)] shadow-xs transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-orange)] focus:ring-offset-1 disabled:opacity-50"
+        >
+          <RefreshCw
+            className={`h-4 w-4 ${
+              isRefreshing ? "animate-spin text-[var(--color-brand-orange)]" : ""
+            }`}
+          />
+        </button>
 
         <NotificationPopover />
 

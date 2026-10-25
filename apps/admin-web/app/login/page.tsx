@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Shield, Lock, Mail, KeyRound, AlertCircle, ArrowRight, ArrowLeft, Loader2, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
@@ -31,9 +31,12 @@ function requiresTwoFactor(data: unknown): boolean | null {
   return null;
 }
 
-export default function AdminLoginPage() {
+function AdminLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { refreshUser } = useAuth();
+
+  const sessionExpired = searchParams.get("session_expired") === "1";
 
   const [stage, setStage] = React.useState<1 | 2>(1);
   const [email, setEmail] = React.useState("");
@@ -174,6 +177,13 @@ export default function AdminLoginPage() {
         </div>
 
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-7 shadow-xl">
+          {sessionExpired && !error && (
+            <div className="mb-5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 text-xs flex items-start gap-2.5">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>Your session has expired. Please sign in again to continue.</span>
+            </div>
+          )}
+
           {error && (
             <div className="mb-5 p-3.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-start gap-2.5">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
@@ -309,5 +319,13 @@ export default function AdminLoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <React.Suspense fallback={null}>
+      <AdminLoginForm />
+    </React.Suspense>
   );
 }

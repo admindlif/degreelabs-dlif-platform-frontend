@@ -5,12 +5,14 @@ import {
     Calendar,
     LockKeyhole,
     PlayCircle,
+    RefreshCw,
     Video,
 } from "lucide-react";
 
 import Link from "next/link";
 
 import { PortalShell } from "@/components/layout/portal-shell";
+import { Button } from "@/components/ui/button";
 import { getDiscoverWeeks } from "@/lib/api/discover";
 
 import {
@@ -25,20 +27,43 @@ export default function SessionsPage() {
     const [loading, setLoading] =
         React.useState(true);
 
+    const [refreshing, setRefreshing] =
+        React.useState(false);
+
+    const [lastRefreshedAt, setLastRefreshedAt] =
+        React.useState<Date | null>(null);
+
     const [error, setError] =
         React.useState<string | null>(null);
 
-    React.useEffect(() => {
-        getDiscoverWeeks()
-            .then(setWeeks)
-            .catch((err) => {
-                setError(
-                    err?.message ||
-                    "Unable to load sessions."
-                );
-            })
-            .finally(() => setLoading(false));
+    const loadWeeks = React.useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
+        setError(null);
+        try {
+            const data = await getDiscoverWeeks();
+            setWeeks(data);
+            if (silent) setLastRefreshedAt(new Date());
+        } catch (err: unknown) {
+            setError(
+                err instanceof Error && err.message
+                    ? err.message
+                    : "Unable to load sessions."
+            );
+        } finally {
+            if (!silent) setLoading(false);
+            setRefreshing(false);
+        }
     }, []);
+
+    React.useEffect(() => {
+        void loadWeeks(false);
+    }, [loadWeeks]);
+
+    const handleRefresh = React.useCallback(() => {
+        if (refreshing) return;
+        setRefreshing(true);
+        void loadWeeks(true);
+    }, [loadWeeks, refreshing]);
 
     const sessions: SessionSummary[] = weeks.flatMap(
         (week) => week.sessions
@@ -49,14 +74,36 @@ export default function SessionsPage() {
             breadcrumbItems={["My Sessions"]}
         >
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-2xl font-extrabold">
-                        My Sessions
-                    </h1>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-extrabold">
+                            My Sessions
+                        </h1>
 
-                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                        Access upcoming sessions, meeting links and recordings.
-                    </p>
+                        <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                            Access upcoming sessions, meeting links and recordings.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                        {lastRefreshedAt && (
+                            <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] font-medium">
+                                Updated {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        )}
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleRefresh}
+                            disabled={refreshing || loading}
+                            className="self-start sm:self-auto h-9 gap-2 text-xs"
+                            title="Refresh sessions"
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-[var(--color-brand-orange)]" : ""}`} />
+                            <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+                        </Button>
+                    </div>
                 </div>
 
                 {loading && (

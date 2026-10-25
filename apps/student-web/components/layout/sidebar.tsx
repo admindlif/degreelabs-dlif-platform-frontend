@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ChevronRight,
   ClipboardCheck,
+  Home,
 } from "lucide-react";
 
 import { getDiscoverWeeks } from "@/lib/api/discover";
@@ -469,7 +470,7 @@ export function Sidebar({
     >
       {/* Brand Header */}
       <div className="flex h-16 shrink-0 items-center gap-3 border-b border-[var(--color-border-default)] px-5">
-        <Link href="/" onClick={onNavigate} className="flex items-center gap-3 group">
+        <Link href="/home" onClick={onNavigate} className="flex items-center gap-3 group">
           <div className="relative w-36 h-9 flex items-center">
             <Image
               src="/degreelabs-logo.png"
@@ -506,6 +507,23 @@ export function Sidebar({
 
       {/* Navigation Sections */}
       <div className="flex-1 min-h-0 overflow-y-auto px-3 py-2 space-y-4">
+        {/* Fellowship Home Navigation */}
+        <div>
+          <Link
+            href="/home"
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-bold transition-colors",
+              pathname === "/home" || pathname === "/"
+                ? "bg-[var(--color-brand-orange-subtle)] text-[var(--color-text-primary)]"
+                : "text-[var(--color-text-body)] hover:bg-[var(--color-brand-orange-subtle)]"
+            )}
+          >
+            <Home className="w-4 h-4 text-[var(--color-brand-orange)]" />
+            Home
+          </Link>
+        </div>
+
         {/* DISCOVER Session Navigation */}
         <div
           className="space-y-2 rounded-2xl p-1"
@@ -516,11 +534,11 @@ export function Sidebar({
         >
           <div>
             <Link
-              href="/"
+              href="/discover"
               onClick={onNavigate}
               className={cn(
                 "flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-bold transition-colors",
-                pathname === "/"
+                pathname === "/discover" || pathname.startsWith("/discover/") || pathname.startsWith("/sessions/")
                   ? "bg-[var(--color-brand-orange-subtle)] text-[var(--color-text-primary)]"
                   : "text-[var(--color-text-body)] hover:bg-[var(--color-brand-orange-subtle)]"
               )}

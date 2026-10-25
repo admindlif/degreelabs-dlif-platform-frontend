@@ -1,6 +1,18 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+export class ApiError extends Error {
+  status: number;
+  data: unknown;
+
+  constructor(message: string, status: number, data?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.data = data;
+  }
+}
+
 export async function adminApiClient<T>(
   endpoint: string,
   options: RequestInit = {}
@@ -23,6 +35,7 @@ export async function adminApiClient<T>(
   const url = `${base}${path}`;
 
   const res = await fetch(url, {
+    cache: "no-store",
     ...options,
     credentials: "include",
     headers,
@@ -37,6 +50,21 @@ export async function adminApiClient<T>(
       // Response may not contain JSON
     }
 
+    // 401 / 403 → the admin session has expired or the cookie was lost.
+    // Redirect to the login page so the admin can re-authenticate without
+    // needing to manually sign out and sign back in.
+    if (res.status === 401 || res.status === 403) {
+      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login?session_expired=1";
+      }
+      // Throw so the calling code stops processing immediately.
+      throw new ApiError(
+        "Your session has expired. Please sign in again.",
+        res.status,
+        errorData
+      );
+    }
+
     const detail =
       typeof errorData === "object" &&
         errorData !== null &&
@@ -47,7 +75,7 @@ export async function adminApiClient<T>(
     const message =
       detail || `Admin API Request failed with status ${res.status}`;
 
-    throw new Error(message);
+    throw new ApiError(message, res.status, errorData);
   }
 
   // DELETE endpoints usually return HTTP 204 with an empty body.

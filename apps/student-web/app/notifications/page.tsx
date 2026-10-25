@@ -12,6 +12,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { PortalShell } from "@/components/layout/portal-shell";
+import { Button } from "@/components/ui/button";
 import {
   getFellowChecklist,
   updateChecklistCompletion,
@@ -154,21 +155,35 @@ function sectionLabel(status: ChecklistStatus) {
 export default function NotificationsPage() {
   const [checklist, setChecklist] = useState<FellowChecklistResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<ChecklistFilter>("all");
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
 
-  const loadChecklist = useCallback(async () => {
+  const loadChecklist = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const data = await getFellowChecklist();
       setChecklist(data);
       setError(null);
+      if (silent) {
+        setLastRefreshedAt(new Date());
+        window.dispatchEvent(new CustomEvent("checklist-updated"));
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load your checklist.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      setRefreshing(false);
     }
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    if (refreshing) return;
+    setRefreshing(true);
+    void loadChecklist(true);
+  }, [loadChecklist, refreshing]);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,8 +234,7 @@ export default function NotificationsPage() {
     setError(null);
     try {
       await updateChecklistCompletion(item.id, !item.is_completed);
-      await loadChecklist();
-      window.dispatchEvent(new CustomEvent("checklist-updated"));
+      await loadChecklist(true);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Unable to update this item.");
     } finally {
@@ -240,15 +254,39 @@ export default function NotificationsPage() {
   ];
 
   return (
-    <PortalShell breadcrumbItems={["Checklist"]}>
+    <PortalShell
+      breadcrumbItems={["Checklist"]}
+    >
       <div className="space-y-6">
-        <header>
-          <h1 className="text-2xl font-extrabold">
-            Checklist
-          </h1>
-          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-            Stay updated with fellowship actions and important updates.
-          </p>
+        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-extrabold">
+              Checklist
+            </h1>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+              Stay updated with fellowship actions and important updates.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            {lastRefreshedAt && (
+              <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] font-medium">
+                Updated {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              className="self-start sm:self-auto h-9 gap-2 text-xs"
+              title="Refresh checklist"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-[var(--color-brand-orange)]" : ""}`} />
+              <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+            </Button>
+          </div>
         </header>
 
         {loading ? (
