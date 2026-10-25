@@ -286,3 +286,36 @@ export interface SessionTranscriptResponse {
   provider: "tldv" | "legacy" | string | null;
 }
 
+// --- Fellowship Homepage Phase Access ---
+// Expected contract from /api/v1/fellow/homepage
+
+export type PhaseAccessStatus =
+  | "active"
+  | "unlocked"
+  | "locked"
+  | "coming_soon"
+  | string;
+
+export interface FellowshipPhase {
+  /** Phase code, e.g. "DISCOVER", "VALIDATE", "GROW" */
+  code: string;
+  title?: string;
+  /** The DLIF development principle, e.g. "THINK", "PROVE", "DELIVER" */
+  principle?: string;
+  duration?: string;
+  /** Whether the fellow is authorised to enter this phase */
+  access_status: PhaseAccessStatus;
+  can_enter: boolean;
+  /** Reason shown when locked */
+  lock_reason: string | null;
+}
+
+export interface FellowHomepageResponse {
+  fellow?: FellowUserSummary;
+  cohort?: CohortSummary;
+  current_phase?: PhaseSummary;
+  phases?: FellowshipPhase[];
+}
+
+export type FellowHomepageData = FellowHomepageResponse | FellowshipPhase[];
+

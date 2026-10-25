@@ -327,7 +327,7 @@ function StudentActivationContent() {
       const success = await refreshUser();
       if (success) {
         setRecoveryCodes([]);
-        router.push("/");
+        router.push("/home");
       } else {
         setError(
           "Your account is active, but the authenticated session could not be loaded. Please sign in again."

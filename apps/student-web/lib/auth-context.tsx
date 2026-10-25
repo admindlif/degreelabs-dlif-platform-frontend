@@ -153,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!user && !isPublic) {
       router.push("/login");
     } else if (user && pathname.startsWith("/login")) {
-      router.push("/");
+      router.push("/home");
     }
   }, [user, loading, pathname, router]);
 

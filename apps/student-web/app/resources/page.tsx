@@ -5,39 +5,81 @@ import {
     BookOpen,
     ExternalLink,
     FileText,
+    RefreshCw,
 } from "lucide-react";
 
 import { PortalShell } from "@/components/layout/portal-shell";
+import { Button } from "@/components/ui/button";
 import { getFellowResources } from "@/lib/api/toolkit";
 import { PhaseResource } from "@/lib/api/types";
 
 export default function ResourcesPage() {
     const [resources, setResources] = React.useState<PhaseResource[]>([]);
     const [loading, setLoading] = React.useState(true);
+    const [refreshing, setRefreshing] = React.useState(false);
+    const [lastRefreshedAt, setLastRefreshedAt] = React.useState<Date | null>(null);
     const [error, setError] = React.useState<string | null>(null);
 
-    React.useEffect(() => {
-        getFellowResources()
-            .then(setResources)
-            .catch((err) => {
-                setError(err?.message || "Unable to load resources.");
-            })
-            .finally(() => setLoading(false));
+    const loadResources = React.useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
+        setError(null);
+        try {
+            const data = await getFellowResources();
+            setResources(data);
+            if (silent) setLastRefreshedAt(new Date());
+        } catch (err: unknown) {
+            setError(err instanceof Error && err.message ? err.message : "Unable to load resources.");
+        } finally {
+            if (!silent) setLoading(false);
+            setRefreshing(false);
+        }
     }, []);
+
+    React.useEffect(() => {
+        void loadResources(false);
+    }, [loadResources]);
+
+    const handleRefresh = React.useCallback(() => {
+        if (refreshing) return;
+        setRefreshing(true);
+        void loadResources(true);
+    }, [loadResources, refreshing]);
 
     return (
         <PortalShell
             breadcrumbItems={["Resources"]}
         >
             <div className="space-y-6">
-                <div>
-                    <h1 className="text-2xl font-extrabold">
-                        Resources
-                    </h1>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-extrabold">
+                            Resources
+                        </h1>
 
-                    <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                        Fellowship handbooks, templates, guides and reference material.
-                    </p>
+                        <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                            Fellowship handbooks, templates, guides and reference material.
+                        </p>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                        {lastRefreshedAt && (
+                            <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] font-medium">
+                                Updated {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        )}
+                        <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleRefresh}
+                            disabled={refreshing || loading}
+                            className="self-start sm:self-auto h-9 gap-2 text-xs"
+                            title="Refresh resources"
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin text-[var(--color-brand-orange)]" : ""}`} />
+                            <span>{refreshing ? "Refreshing..." : "Refresh"}</span>
+                        </Button>
+                    </div>
                 </div>
 
                 {loading && (
