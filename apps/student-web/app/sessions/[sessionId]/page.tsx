@@ -512,7 +512,7 @@ function SessionWorkspaceContent() {
             },
             {
                 key: "feedback",
-                label: "Feedback",
+                label: "Submission Insights",
                 icon: MessageSquare,
             },
         ];
@@ -790,18 +790,18 @@ function SessionWorkspaceContent() {
 
             <div>
                 <h2 className="text-lg font-bold">
-                    Feedback
+                    Submission Insights
                 </h2>
 
                 <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                    Review feedback provided for your Team&apos;s submission.
+                    Review submission insights provided for your Team&apos;s submission.
                 </p>
             </div>
 
 
             {feedbackLoading && (
                 <div className="rounded-2xl border border-[var(--color-border-default)] p-8 text-center text-sm text-[var(--color-text-muted)]">
-                    Loading feedback...
+                    Loading submission insights...
                 </div>
             )}
 
@@ -819,7 +819,7 @@ function SessionWorkspaceContent() {
                     <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] p-6">
 
                         <h3 className="text-sm font-bold">
-                            No feedback yet
+                            No submission insights yet
                         </h3>
 
                         <p className="text-sm text-[var(--color-text-muted)] mt-2">
@@ -828,6 +828,8 @@ function SessionWorkspaceContent() {
 
                     </div>
                 )}
+
+
 
 
             {!feedbackLoading &&
@@ -869,7 +871,7 @@ function SessionWorkspaceContent() {
 
                             <div>
                                 <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-2">
-                                    Admin Feedback
+                                    Submission Insights
                                 </div>
 
                                 <p className="text-sm text-[var(--color-text-body)] whitespace-pre-wrap leading-6">
@@ -889,7 +891,7 @@ function SessionWorkspaceContent() {
                                         rel="noopener noreferrer"
                                         className="inline-flex min-h-10 w-full items-center justify-center rounded-xl bg-[var(--color-brand-blue)] px-4 py-2 text-xs font-bold text-white sm:w-auto"
                                     >
-                                        Open Feedback / Reference Link
+                                        Open Insights / Reference Link
                                     </a>
 
                                 </div>
