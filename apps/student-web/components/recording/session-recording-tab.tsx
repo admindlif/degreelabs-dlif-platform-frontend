@@ -186,11 +186,7 @@ export function SessionRecordingTab({
             <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
               Recording & AI Transcript
             </h2>
-            {recording?.provider === "tldv" || hasRecording ? (
-              <Badge variant="brand" size="sm">
-                tl;dv Integrated
-              </Badge>
-            ) : null}
+
             {recording?.duration_seconds ? (
               <Badge variant="muted" size="sm">
                 {formatTime(recording.duration_seconds)}
