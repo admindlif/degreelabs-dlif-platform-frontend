@@ -1,0 +1,173 @@
+/**
+ * DegreeLabs Portal Design System Tokens
+ * Extracted directly from live site: https://www.degreelabs.com
+ * Tailwind CSS v4 Compatible
+ */
+
+:root {
+  /* =========================================================================
+   * 1. Extracted Brand Palette
+   * ========================================================================= */
+
+  /* Signature Primary Accent (Buttons, Highlights) */
+  --color-brand-orange: #FF510E;
+  --color-brand-orange-hover: #E0460A;
+  --color-brand-orange-active: #C73D07;
+  --color-brand-orange-subtle: #FFF0EB;
+
+  /* Official Brand Mark Colors (Logo & Badges) */
+  --color-brand-navy: #13152B;
+  --color-brand-navy-light: #1E2242;
+  --color-brand-blue: #3877F9;
+  --color-brand-blue-light: #3CA3FA;
+  --color-brand-blue-subtle: #EFF5FE;
+
+  /* Neutrals & Typography */
+  --color-text-primary: #151515;    /* H1, main titles */
+  --color-text-secondary: #2C2C2C;  /* Section subheads, active nav */
+  --color-text-body: #444444;       /* Body copy, descriptions */
+  --color-text-muted: #8A8A8A;      /* Captions, inactive nav, placeholders */
+
+  /* Surfaces & Backgrounds */
+  --color-bg-canvas: #FFFFFF;       /* Pure white canvas, nav */
+  --color-bg-surface: #F9F9F9;      /* Primary card surface (.framer-2h3k6v) */
+  --color-bg-subtle: #F3F3F3;       /* Nested sub-surfaces, pill chips */
+
+  /* Borders & Dividers */
+  --color-border-default: #E8E8E8;  /* Default 1px card/nav border */
+  --color-border-strong: #D0D0D0;   /* Secondary button, input stroke */
+  --color-border-subtle: #DAD7D7;   /* Dividers, inner borders */
+
+  /* Semantic Accents */
+  --color-accent-gold: #FFD000;     /* Star ratings, awards */
+  --color-success: #25D366;         /* Live indicators, passed */
+  --color-danger: #F71919;          /* Error alerts, past-due */
+
+  /* =========================================================================
+   * 2. Typography Variables
+   * ========================================================================= */
+  --font-sans: "Hanken Grotesk", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-serif-accent: "DM Serif Text", Georgia, serif;
+  --font-mono: "Fragment Mono", Menlo, monospace;
+
+  /* =========================================================================
+   * 3. Radius System
+   * ========================================================================= */
+  --radius-pill: 500px;
+  --radius-card: 24px;
+  --radius-card-sm: 16px;
+  --radius-input: 12px;
+  --radius-badge: 8px;
+
+  /* =========================================================================
+   * 4. Elevation & Shadows
+   * ========================================================================= */
+  --shadow-card: 0 4px 30px rgba(0, 0, 0, 0.06);
+  --shadow-hover: 0 8px 36px rgba(0, 0, 0, 0.09);
+  --shadow-dropdown: 0 10px 40px rgba(0, 0, 0, 0.12);
+
+  /* =========================================================================
+   * 5. Animation Constants
+   * ========================================================================= */
+  --ease-degreelabs: cubic-bezier(0.44, 0, 0.56, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-page: 350ms;
+}
+
+/* Tailwind v4 Inline Theme Extension */
+@theme inline {
+  --color-brand-orange: var(--color-brand-orange);
+  --color-brand-orange-hover: var(--color-brand-orange-hover);
+  --color-brand-orange-subtle: var(--color-brand-orange-subtle);
+
+  --color-brand-navy: var(--color-brand-navy);
+  --color-brand-navy-light: var(--color-brand-navy-light);
+  --color-brand-blue: var(--color-brand-blue);
+  --color-brand-blue-light: var(--color-brand-blue-light);
+  --color-brand-blue-subtle: var(--color-brand-blue-subtle);
+
+  --color-text-primary: var(--color-text-primary);
+  --color-text-secondary: var(--color-text-secondary);
+  --color-text-body: var(--color-text-body);
+  --color-text-muted: var(--color-text-muted);
+
+  --color-bg-canvas: var(--color-bg-canvas);
+  --color-bg-surface: var(--color-bg-surface);
+  --color-bg-subtle: var(--color-bg-subtle);
+
+  --color-border-default: var(--color-border-default);
+  --color-border-strong: var(--color-border-strong);
+  --color-border-subtle: var(--color-border-subtle);
+
+  --color-accent-gold: var(--color-accent-gold);
+  --color-success: var(--color-success);
+  --color-danger: var(--color-danger);
+
+  --font-sans: var(--font-sans);
+  --font-serif-accent: var(--font-serif-accent);
+  --font-mono: var(--font-mono);
+
+  --radius-pill: var(--radius-pill);
+  --radius-card: var(--radius-card);
+  --radius-card-sm: var(--radius-card-sm);
+  --radius-input: var(--radius-input);
+  --radius-badge: var(--radius-badge);
+}
+
+/* Utility Helper Classes */
+.font-serif-italic {
+  font-family: var(--font-serif-accent);
+  font-style: italic;
+  font-weight: 400;
+  color: var(--color-brand-orange);
+}
+
+.btn-pill-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--color-brand-orange);
+  color: #FFFFFF;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-weight: 700;
+  padding: 14px 24px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-degreelabs);
+}
+
+.btn-pill-primary:hover {
+  background-color: var(--color-brand-orange-hover);
+  transform: translateY(-1px);
+}
+
+.btn-pill-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background-color: transparent;
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  padding: 14px 24px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-degreelabs);
+}
+
+.btn-pill-secondary:hover {
+  background-color: var(--color-bg-subtle);
+  border-color: var(--color-text-muted);
+}
+
+.card-degreelabs {
+  background-color: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-card);
+  padding: 32px;
+}
