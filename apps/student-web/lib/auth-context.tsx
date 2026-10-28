@@ -2,7 +2,12 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { FellowSessionLifecycle } from "@/components/auth/fellow-session-lifecycle";
+import { apiClient, ApiError } from "@/lib/api/client";
+import { clearFellowDrafts } from "@/lib/auth/drafts";
+import { fellowSessionClient, SessionNetworkError } from "@/lib/auth/session-client";
 import { getApiBaseUrl } from "@/lib/api/config";
+import { Loader2 } from "lucide-react";
 
 export interface AuthUser {
   id: string;
@@ -10,29 +15,29 @@ export interface AuthUser {
   first_name: string;
   last_name: string;
   role: string;
-  account_status: string;
-  two_factor_enabled: boolean;
-  created_at?: string;
+  account_status?: string;
+  is_active?: boolean;
+  two_factor_enabled?: boolean;
 }
 
-interface AuthContextType {
+interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   error: string | null;
-  refreshUser: () => Promise<boolean>;
   logout: () => Promise<void>;
+  refreshUser: (triggerLoader?: boolean) => Promise<boolean>;
 }
 
-const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
+const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
 function responseDetail(data: unknown): string | null {
   if (
     typeof data === "object" &&
     data !== null &&
     "detail" in data &&
-    typeof data.detail === "string"
+    typeof (data as { detail: unknown }).detail === "string"
   ) {
-    return data.detail;
+    return (data as { detail: string }).detail;
   }
   return null;
 }
@@ -41,39 +46,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [verifiedUnauthenticated, setVerifiedUnauthenticated] = React.useState(false);
   const router = useRouter();
   const pathname = usePathname();
 
-  const refreshUser = React.useCallback(async (): Promise<boolean> => {
-    setLoading(true);
+  const publicPaths = React.useMemo(
+    () => [
+      "/login",
+      "/activate",
+      "/forgot-password",
+      "/verify-recovery-code",
+      "/reset-password",
+    ],
+    []
+  );
 
+  const refreshUser = React.useCallback(async (triggerLoader = false): Promise<boolean> => {
+    if (triggerLoader) {
+      setLoading(true);
+    }
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/me`, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-      });
-
-      if (res.status === 401 || res.status === 403) {
+      const session = await fellowSessionClient.getStatus();
+      if (!session.authenticated) {
         setUser(null);
         setError(null);
+        setVerifiedUnauthenticated(true);
         return false;
       }
 
-      if (!res.ok) {
-        const data: unknown = await res.json().catch(() => null);
-        setUser(null);
-        setError(
-          responseDetail(data) ??
-          "Unable to verify your Fellow Portal session. Please try again."
-        );
-        return false;
-      }
-
-      const profile: AuthUser = await res.json();
+      const profile = await apiClient<AuthUser>("/api/v1/auth/me");
       const role = profile.role.toLowerCase();
       if (role !== "fellow" && role !== "student") {
         setUser(null);
+        setVerifiedUnauthenticated(true);
         setError(
           "Access denied: Your account role does not have access to the Fellow Portal."
         );
@@ -82,12 +87,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser(profile);
       setError(null);
+      setVerifiedUnauthenticated(false);
       return true;
-    } catch {
-      setUser(null);
+    } catch (caught) {
+      if (caught instanceof ApiError && caught.status === 403) {
+        setUser(null);
+        setVerifiedUnauthenticated(true);
+        setError("Access denied: Your account role does not have access to the Fellow Portal.");
+        return false;
+      }
+      if (caught instanceof ApiError && caught.status === 401) {
+        setUser(null);
+        setVerifiedUnauthenticated(true);
+        setError(null);
+        return false;
+      }
+      if (!(caught instanceof SessionNetworkError) && !(caught instanceof ApiError)) {
+        throw caught;
+      }
       setError(
         "Unable to connect to the Fellow Portal service. Please try again shortly."
       );
+      setVerifiedUnauthenticated(false);
       return false;
     } finally {
       setLoading(false);
@@ -95,20 +116,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   React.useEffect(() => {
-    async function initializeSession() {
-      // Activation uses the onboarding cookie, not the authenticated session.
-      // Do not call /auth/me until activation is complete.
-      if (pathname.startsWith("/activate")) {
-        setLoading(false);
-        return;
-      }
-
-      await Promise.resolve();
-      await refreshUser();
+    const isPublic = publicPaths.some((path) => pathname.startsWith(path));
+    if (isPublic && pathname.startsWith("/login") && user) {
+      router.replace("/home");
+      return;
     }
 
-    void initializeSession();
-  }, [pathname, refreshUser]);
+    if (!user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void refreshUser();
+    }
+  }, [pathname, user, refreshUser, publicPaths, router]);
+
+  const clearLocalSession = React.useCallback(() => {
+    setUser(null);
+    setError(null);
+    setVerifiedUnauthenticated(true);
+    if (typeof window !== "undefined") {
+      clearFellowDrafts(window.sessionStorage);
+    }
+  }, []);
+
   const logout = React.useCallback(async (): Promise<void> => {
     setError(null);
 
@@ -118,71 +146,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         credentials: "include",
         cache: "no-store",
       });
-      const data: unknown = await res.json().catch(() => null);
 
-      if (!res.ok) {
+      if (!res.ok && res.status !== 401) {
+        const data: unknown = await res.json().catch(() => null);
         const message =
-          responseDetail(data) ??
-          "Unable to sign out. Please try again before closing this browser.";
+          responseDetail(data) ?? "Unable to log out right now. Please try again.";
         setError(message);
-        throw new Error(message);
       }
-
-      setUser(null);
-      setError(null);
-      router.push("/login");
     } catch (caught) {
       if (caught instanceof Error) {
         setError(caught.message);
-        throw caught;
       }
-
-      const message =
-        "Unable to connect to the Fellow Portal service. Please try signing out again.";
-      setError(message);
-      throw new Error(message);
+    } finally {
+      clearLocalSession();
+      fellowSessionClient.announce({ type: "logout" });
+      router.replace("/login");
     }
-  }, [router]);
+  }, [clearLocalSession, router]);
+
+  const handleRemoteLogout = React.useCallback(() => {
+    clearLocalSession();
+    router.replace("/login");
+  }, [clearLocalSession, router]);
 
   React.useEffect(() => {
     if (loading) return;
 
-    const publicPaths = [
-      "/login",
-      "/activate",
-      "/forgot-password",
-      "/verify-recovery-code",
-      "/reset-password",
-    ];
     const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
-    if (!user && !isPublic) {
-      router.push("/login");
+    if (!user && verifiedUnauthenticated && !isPublic) {
+      router.replace("/login");
     } else if (user && pathname.startsWith("/login")) {
-      router.push("/home");
+      router.replace("/home");
     }
-  }, [user, loading, pathname, router]);
+  }, [user, loading, pathname, router, verifiedUnauthenticated, publicPaths]);
 
-  const publicPaths = [
-    "/login",
-    "/activate",
-    "/forgot-password",
-    "/verify-recovery-code",
-    "/reset-password",
-  ];
   const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
   if (loading && !isPublic) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-white">
-        <div className="text-sm text-gray-500">
-          Loading...
-        </div>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg-canvas)]">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand-orange)]" />
       </div>
     );
   }
 
   if (!user && !isPublic) {
+    if (error && !verifiedUnauthenticated) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[var(--color-bg-canvas)] p-6">
+          <div className="w-full max-w-md rounded-2xl border border-[var(--color-border-default)] bg-white p-6 text-center shadow-lg">
+            <h1 className="text-lg font-bold text-[var(--color-text-primary)]">
+              Unable to verify your session
+            </h1>
+            <p className="mt-2 text-sm text-[var(--color-text-body)]">{error}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                void refreshUser();
+              }}
+              className="mt-5 rounded-full bg-[var(--color-brand-orange)] px-5 py-2.5 text-sm font-bold text-white hover:bg-[#e05423]"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -192,11 +223,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         loading,
         error,
-        refreshUser,
         logout,
+        refreshUser,
       }}
     >
       {children}
+      <FellowSessionLifecycle
+        active={Boolean(user)}
+        onLogout={logout}
+        onRemoteLogout={handleRemoteLogout}
+      />
     </AuthContext.Provider>
   );
 }

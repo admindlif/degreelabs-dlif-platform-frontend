@@ -1,10 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { X, Loader2, Sparkles, MessageSquare } from "lucide-react";
+import { X, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChecklistItem } from "@/lib/api/types";
 import { submitChecklistResponse } from "@/lib/api/checklist";
+import {
+  fellowDraftKey,
+  loadExpiringDraft,
+  removeDraft,
+  saveExpiringDraft,
+} from "@/lib/auth/drafts";
 
 interface ChecklistResponseModalProps {
   item: ChecklistItem | null;
@@ -14,34 +20,68 @@ interface ChecklistResponseModalProps {
   onOpenFeedback?: (item: ChecklistItem) => void;
 }
 
-export function ChecklistResponseModal({
+interface ChecklistDraft {
+  contribution: string;
+  reflection: string;
+  myThoughts: string;
+}
+
+function getInitialValues(item: ChecklistItem) {
+  let contribution = item.contribution || "";
+  let reflection = item.reflection || "";
+  let myThoughts = item.my_thoughts || "";
+
+  if (typeof window !== "undefined") {
+    const draft = loadExpiringDraft<ChecklistDraft>(
+      window.sessionStorage,
+      fellowDraftKey("checklist", item.id)
+    );
+    if (draft) {
+      if (draft.contribution) contribution = draft.contribution;
+      if (draft.reflection) reflection = draft.reflection;
+      if (draft.myThoughts) myThoughts = draft.myThoughts;
+    }
+  }
+
+  return { contribution, reflection, myThoughts };
+}
+
+function ChecklistResponseDialog({
   item,
-  isOpen,
   onClose,
   onSuccess,
   onOpenFeedback,
-}: ChecklistResponseModalProps) {
-  const [contribution, setContribution] = React.useState("");
-  const [reflection, setReflection] = React.useState("");
-  const [myThoughts, setMyThoughts] = React.useState("");
+}: {
+  item: ChecklistItem;
+  onClose: () => void;
+  onSuccess: (updatedItem: ChecklistItem) => void;
+  onOpenFeedback?: (item: ChecklistItem) => void;
+}) {
+  const [initial] = React.useState(() => getInitialValues(item));
+  const [contribution, setContribution] = React.useState(initial.contribution);
+  const [reflection, setReflection] = React.useState(initial.reflection);
+  const [myThoughts, setMyThoughts] = React.useState(initial.myThoughts);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Sync state when opened with an item
-  React.useEffect(() => {
-    if (item && isOpen) {
-      setContribution(item.contribution || "");
-      setReflection(item.reflection || "");
-      setMyThoughts(item.my_thoughts || "");
-      setError(null);
-    }
-  }, [item, isOpen]);
-
-  if (!isOpen || !item) return null;
+  const updateDraft = React.useCallback(
+    (nextContrib: string, nextReflect: string, nextThoughts: string) => {
+      if (typeof window === "undefined") return;
+      saveExpiringDraft(
+        window.sessionStorage,
+        fellowDraftKey("checklist", item.id),
+        {
+          contribution: nextContrib,
+          reflection: nextReflect,
+          myThoughts: nextThoughts,
+        }
+      );
+    },
+    [item.id]
+  );
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!item) return;
 
     if (!contribution.trim()) {
       setError("Please describe your contribution.");
@@ -63,6 +103,9 @@ export function ChecklistResponseModal({
         reflection.trim(),
         myThoughts.trim()
       );
+      if (typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, fellowDraftKey("checklist", item.id));
+      }
       onSuccess(updated);
       onClose();
     } catch (err: unknown) {
@@ -162,7 +205,11 @@ export function ChecklistResponseModal({
               id="checklist-contribution"
               rows={4}
               value={contribution}
-              onChange={(e) => setContribution(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setContribution(val);
+                updateDraft(val, reflection, myThoughts);
+              }}
               placeholder="Detail the research, calculations, synthesis, or artifacts you personally produced for this milestone..."
               disabled={saving}
               className="w-full resize-y rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-text-primary)] focus:border-[var(--color-brand-orange)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-orange)] transition-colors placeholder:text-[var(--color-text-muted)] disabled:opacity-60"
@@ -184,7 +231,11 @@ export function ChecklistResponseModal({
               id="checklist-reflection"
               rows={4}
               value={reflection}
-              onChange={(e) => setReflection(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setReflection(val);
+                updateDraft(contribution, val, myThoughts);
+              }}
               placeholder="Reflect on key takeaways, customer surprises, technical bottlenecks, or areas requiring next-round revision..."
               disabled={saving}
               className="w-full resize-y rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-text-primary)] focus:border-[var(--color-brand-orange)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-orange)] transition-colors placeholder:text-[var(--color-text-muted)] disabled:opacity-60"
@@ -206,7 +257,11 @@ export function ChecklistResponseModal({
               rows={4}
               maxLength={10000}
               value={myThoughts}
-              onChange={(e) => setMyThoughts(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setMyThoughts(val);
+                updateDraft(contribution, reflection, val);
+              }}
               placeholder="Add your thoughts about this checklist item..."
               disabled={saving}
               className="w-full resize-y rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-text-primary)] focus:border-[var(--color-brand-orange)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-orange)] transition-colors placeholder:text-[var(--color-text-muted)] disabled:opacity-60"
@@ -259,5 +314,25 @@ export function ChecklistResponseModal({
         </form>
       </div>
     </div>
+  );
+}
+
+export function ChecklistResponseModal({
+  item,
+  isOpen,
+  onClose,
+  onSuccess,
+  onOpenFeedback,
+}: ChecklistResponseModalProps) {
+  if (!isOpen || !item) return null;
+
+  return (
+    <ChecklistResponseDialog
+      key={item.id}
+      item={item}
+      onClose={onClose}
+      onSuccess={onSuccess}
+      onOpenFeedback={onOpenFeedback}
+    />
   );
 }
