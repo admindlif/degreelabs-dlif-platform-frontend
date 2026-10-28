@@ -17,6 +17,7 @@ import {
   ChevronRight,
   ClipboardCheck,
   Home,
+  ShieldCheck,
 } from "lucide-react";
 
 import { getDiscoverWeeks } from "@/lib/api/discover";
@@ -624,6 +625,24 @@ export function Sidebar({
             );
           })}
         </div>
+
+        {/* Phase Gate Review — below DISCOVER weeks */}
+        <div className="mt-1">
+          <Link
+            href="/discover#discover-gate-results"
+            onClick={onNavigate}
+            className={cn(
+              "flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-xs font-semibold transition-all duration-200",
+              pathname === "/discover"
+                ? "border-orange-200 bg-[var(--color-brand-orange-subtle)] text-[var(--color-text-primary)]"
+                : "border-transparent text-[var(--color-text-body)] hover:border-orange-100 hover:bg-[var(--color-brand-orange-subtle)] hover:text-[var(--color-text-primary)]"
+            )}
+          >
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-[var(--color-brand-orange)]" />
+            <span>Phase Gate Review</span>
+          </Link>
+        </div>
+
         {navigationGroups.map((group) => (
           <div key={group.title} className="space-y-1.5">
             <h4 className="flex items-center gap-2 px-2.5 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[var(--color-text-muted)]">

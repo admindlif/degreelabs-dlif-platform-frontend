@@ -6,9 +6,12 @@ node_modules/
 out/
 dist/
 .cloudflare/
+.wrangler/
 .vinext/
 .vercel/
 *.tsbuildinfo
+*-context.txt
+ctx.txt
 
 # Environment files and secrets
 .env

@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient, ApiError } from "./client";
 import {
   DiscoverOverview,
   DiscoverWeek,
@@ -9,6 +9,10 @@ import {
   SubmissionFeedback,
   SessionRecordingResponse,
   SessionTranscriptResponse,
+  FellowWorkingBoardResponse,
+  FellowWorkingBoardInsightsResponse,
+  SessionOverviewData,
+  PhaseGateAssessmentResponse,
 } from "./types";
 
 export async function getDiscoverOverview(): Promise<DiscoverOverview> {
@@ -85,3 +89,70 @@ export async function getSessionTranscript(
   );
 }
 
+export async function getFellowWorkingBoard(
+  sessionId: string
+): Promise<FellowWorkingBoardResponse | null> {
+  try {
+    return await apiClient<FellowWorkingBoardResponse>(
+      `/api/v1/fellow/sessions/${sessionId}/working-board`
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function getFellowWorkingBoardInsights(
+  sessionId: string
+): Promise<FellowWorkingBoardInsightsResponse | null> {
+  try {
+    return await apiClient<FellowWorkingBoardInsightsResponse>(
+      `/api/v1/fellow/sessions/${sessionId}/working-board-insights`
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function getSessionOverview(
+  sessionId: string
+): Promise<SessionOverviewData | null> {
+  try {
+    return await apiClient<SessionOverviewData>(
+      `/api/v1/fellow/sessions/${sessionId}/overview`
+    );
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 403)) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function getDiscoverGateAssessment(): Promise<PhaseGateAssessmentResponse> {
+  try {
+    return await apiClient<PhaseGateAssessmentResponse>(
+      `/api/v1/fellow/discover/gate-assessment`
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      // Try fallback alias if needed
+      try {
+        return await apiClient<PhaseGateAssessmentResponse>(
+          `/api/v1/fellow/discover-gate`
+        );
+      } catch (innerErr) {
+        if (innerErr instanceof ApiError && innerErr.status === 404) {
+          return { status: "not_submitted", message: "No assessment submitted yet." };
+        }
+      }
+      return { status: "not_submitted", message: "No assessment submitted yet." };
+    }
+    throw err;
+  }
+}
