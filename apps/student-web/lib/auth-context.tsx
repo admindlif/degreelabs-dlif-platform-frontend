@@ -147,7 +147,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     if (loading) return;
 
-    const publicPaths = ["/login", "/activate"];
+    const publicPaths = [
+      "/login",
+      "/activate",
+      "/forgot-password",
+      "/verify-recovery-code",
+      "/reset-password",
+    ];
     const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
     if (!user && !isPublic) {
@@ -157,7 +163,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, pathname, router]);
 
-  const publicPaths = ["/login", "/activate"];
+  const publicPaths = [
+    "/login",
+    "/activate",
+    "/forgot-password",
+    "/verify-recovery-code",
+    "/reset-password",
+  ];
   const isPublic = publicPaths.some((path) => pathname.startsWith(path));
 
   if (loading && !isPublic) {

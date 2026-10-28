@@ -21,12 +21,14 @@ import {
   LogOut,
   RefreshCw,
   Shield,
+  ShieldCheck,
   X,
   ArrowRight,
   Lock,
   Menu,
   Unlock,
   ClipboardList,
+  UserCheck,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -86,6 +88,9 @@ import { SubmissionFeedbackModal } from "@/components/admin/submission-feedback-
 import { TeamChallengeResourcesModal } from "@/components/admin/team-challenge-resources-modal";
 import { TeamPhaseAccessModal } from "@/components/admin/team-phase-access-modal";
 import { ChecklistItemModal } from "@/components/admin/checklist-item-modal";
+import { MentorManagementTab } from "@/components/admin/mentor-management-tab";
+import { WorkingBoardManagementTab } from "@/components/admin/working-board-management-tab";
+import { DiscoverGateReviewsTab } from "@/components/admin/discover-gate-reviews-tab";
 
 type NavTab =
   | "Dashboard"
@@ -96,9 +101,12 @@ type NavTab =
   | "Weeks"
   | "Sessions"
   | "Teams"
+  | "Mentors"
+  | "Working Boards"
   | "Resources"
   | "Checklist"
-  | "Weekly Outputs";
+  | "Weekly Outputs"
+  | "Gate Reviews";
 
 interface NavGroup {
   label: string;
@@ -132,6 +140,12 @@ export default function AdminHomePage() {
   const [searchQuery, setSearchQuery] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState<string>("all");
   const [sessionCohortFilter, setSessionCohortFilter] =
+    React.useState<string>("all");
+  const [checklistCohortFilter, setChecklistCohortFilter] =
+    React.useState<string>("all");
+  const [checklistWeekFilter, setChecklistWeekFilter] =
+    React.useState<string>("all");
+  const [checklistSessionFilter, setChecklistSessionFilter] =
     React.useState<string>("all");
 
   // Invite modal state
@@ -392,6 +406,14 @@ export default function AdminHomePage() {
               ? String(teams.length)
               : undefined,
         },
+        {
+          name: "Mentors",
+          icon: UserCheck,
+        },
+        {
+          name: "Working Boards",
+          icon: FileCheck,
+        },
       ],
     },
 
@@ -413,6 +435,16 @@ export default function AdminHomePage() {
         },
       ],
     },
+
+    {
+      label: "PHASE GATES",
+      items: [
+        {
+          name: "Gate Reviews",
+          icon: ShieldCheck,
+        },
+      ],
+    },
   ];
 
   const filteredFellows = fellows.filter((f) => {
@@ -430,6 +462,32 @@ export default function AdminHomePage() {
       : sessions.filter(
         (session) => session.cohort_id === sessionCohortFilter
       );
+
+  const checklistAvailableWeeks = React.useMemo(() => {
+    if (checklistCohortFilter === "all") return weeks;
+    const cohort = cohorts.find((c) => c.id === checklistCohortFilter);
+    if (!cohort) return weeks;
+    const cohortPhases = phases.filter((p) => p.program_id === cohort.program_id);
+    const phaseIds = new Set(cohortPhases.map((p) => p.id));
+    return weeks.filter((w) => phaseIds.has(w.phase_id));
+  }, [checklistCohortFilter, cohorts, phases, weeks]);
+
+  const checklistAvailableSessions = React.useMemo(() => {
+    return sessions.filter((s) => {
+      if (checklistCohortFilter !== "all" && s.cohort_id !== checklistCohortFilter) return false;
+      if (checklistWeekFilter !== "all" && s.week_id !== checklistWeekFilter) return false;
+      return true;
+    });
+  }, [checklistCohortFilter, checklistWeekFilter, sessions]);
+
+  const filteredChecklistItems = React.useMemo(() => {
+    return checklistItems.filter((item) => {
+      if (checklistCohortFilter !== "all" && item.cohort_id && item.cohort_id !== checklistCohortFilter) return false;
+      if (checklistWeekFilter !== "all" && item.week_id && item.week_id !== checklistWeekFilter) return false;
+      if (checklistSessionFilter !== "all" && item.session_id && item.session_id !== checklistSessionFilter) return false;
+      return true;
+    });
+  }, [checklistItems, checklistCohortFilter, checklistWeekFilter, checklistSessionFilter]);
 
   React.useEffect(() => {
     if (!weeklyOutputSessionId) return;
@@ -909,115 +967,115 @@ export default function AdminHomePage() {
               {/* Fellows Data Table */}
               <div className="rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[960px] text-left text-xs">
-                  <thead className="bg-[var(--color-bg-canvas)] border-b border-[var(--color-border-default)]">
-                    <tr className="text-[var(--color-text-muted)] uppercase tracking-wider font-semibold">
-                      <th className="py-3.5 px-4">Fellow Name</th>
-                      <th className="py-3.5 px-4">Email Address</th>
-                      <th className="py-3.5 px-4">Role</th>
-                      <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4">2FA State</th>
-                      <th className="py-3.5 px-4">Enrolled On</th>
-                      <th className="py-3.5 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-border-default)]">
-                    {filteredFellows.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-[var(--color-text-muted)]">
-                          No fellows found matching your search.
-                        </td>
+                  <table className="w-full min-w-[960px] text-left text-xs">
+                    <thead className="bg-[var(--color-bg-canvas)] border-b border-[var(--color-border-default)]">
+                      <tr className="text-[var(--color-text-muted)] uppercase tracking-wider font-semibold">
+                        <th className="py-3.5 px-4">Fellow Name</th>
+                        <th className="py-3.5 px-4">Email Address</th>
+                        <th className="py-3.5 px-4">Role</th>
+                        <th className="py-3.5 px-4">Status</th>
+                        <th className="py-3.5 px-4">2FA State</th>
+                        <th className="py-3.5 px-4">Enrolled On</th>
+                        <th className="py-3.5 px-4 text-right">Actions</th>
                       </tr>
-                    ) : (
-                      filteredFellows.map((f) => (
-                        <tr key={f.id} className="hover:bg-[var(--color-bg-canvas)] transition-colors">
-                          <td className="py-3 px-4 font-bold">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 shrink-0 rounded-full bg-[var(--color-brand-navy)] text-white text-xs font-bold flex items-center justify-center">
-                                {f.first_name[0]}{f.last_name[0]}
-                              </div>
-                              <div>
-                                <div>{f.first_name} {f.last_name}</div>
-                                <span className="text-[10px] text-[var(--color-text-muted)] font-normal">
-                                  ID: {f.id.substring(0, 8)}...
-                                </span>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4 text-[var(--color-text-body)]">{f.email}</td>
-                          <td className="py-3 px-4 font-semibold text-[var(--color-brand-blue)]">
-                            Fellow
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${f.account_status === "active"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : f.account_status === "invited"
-                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                  : "bg-red-50 text-red-700 border border-red-200"
-                                }`}
-                            >
-                              {f.account_status}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4">
-                            <span
-                              className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${f.two_factor_enabled ? "text-emerald-600" : "text-amber-600"
-                                }`}
-                            >
-                              <Shield className="w-3.5 h-3.5" />
-                              {f.two_factor_enabled ? "2FA Verified" : "Pending Setup"}
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-[var(--color-text-muted)]">
-                            {f.created_at ? new Date(f.created_at).toLocaleDateString() : "Recent"}
-                          </td>
-                          <td className="py-3 px-4 text-right">
-
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  alert(
-                                    `Fellow Profile: ${f.first_name} ${f.last_name} (${f.email})`
-                                  )
-                                }
-                                className="px-2.5 py-1 rounded-lg border border-[var(--color-border-default)] hover:border-[var(--color-brand-blue)] hover:text-[var(--color-brand-blue)] font-semibold transition-colors text-[11px]"
-                              >
-                                Details
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  const confirmed = window.confirm(
-                                    `Are you sure you want to delete ${f.first_name} ${f.last_name}?`
-                                  );
-
-                                  if (!confirmed) {
-                                    return;
-                                  }
-
-                                  try {
-                                    await deleteFellow(f.id);
-                                    await loadData();
-                                  } catch (err: unknown) {
-                                    window.alert(
-                                      getErrorMessage(err, "Unable to delete Fellow.")
-                                    );
-                                  }
-                                }}
-                                className="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors text-[11px]"
-                              >
-                                Delete
-                              </button>
-                            </div>
+                    </thead>
+                    <tbody className="divide-y divide-[var(--color-border-default)]">
+                      {filteredFellows.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-8 text-center text-[var(--color-text-muted)]">
+                            No fellows found matching your search.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredFellows.map((f) => (
+                          <tr key={f.id} className="hover:bg-[var(--color-bg-canvas)] transition-colors">
+                            <td className="py-3 px-4 font-bold">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 shrink-0 rounded-full bg-[var(--color-brand-navy)] text-white text-xs font-bold flex items-center justify-center">
+                                  {f.first_name[0]}{f.last_name[0]}
+                                </div>
+                                <div>
+                                  <div>{f.first_name} {f.last_name}</div>
+                                  <span className="text-[10px] text-[var(--color-text-muted)] font-normal">
+                                    ID: {f.id.substring(0, 8)}...
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 text-[var(--color-text-body)]">{f.email}</td>
+                            <td className="py-3 px-4 font-semibold text-[var(--color-brand-blue)]">
+                              Fellow
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${f.account_status === "active"
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : f.account_status === "invited"
+                                    ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                    : "bg-red-50 text-red-700 border border-red-200"
+                                  }`}
+                              >
+                                {f.account_status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${f.two_factor_enabled ? "text-emerald-600" : "text-amber-600"
+                                  }`}
+                              >
+                                <Shield className="w-3.5 h-3.5" />
+                                {f.two_factor_enabled ? "2FA Verified" : "Pending Setup"}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-[var(--color-text-muted)]">
+                              {f.created_at ? new Date(f.created_at).toLocaleDateString() : "Recent"}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    alert(
+                                      `Fellow Profile: ${f.first_name} ${f.last_name} (${f.email})`
+                                    )
+                                  }
+                                  className="px-2.5 py-1 rounded-lg border border-[var(--color-border-default)] hover:border-[var(--color-brand-blue)] hover:text-[var(--color-brand-blue)] font-semibold transition-colors text-[11px]"
+                                >
+                                  Details
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const confirmed = window.confirm(
+                                      `Are you sure you want to delete ${f.first_name} ${f.last_name}?`
+                                    );
+
+                                    if (!confirmed) {
+                                      return;
+                                    }
+
+                                    try {
+                                      await deleteFellow(f.id);
+                                      await loadData();
+                                    } catch (err: unknown) {
+                                      window.alert(
+                                        getErrorMessage(err, "Unable to delete Fellow.")
+                                      );
+                                    }
+                                  }}
+                                  className="px-2.5 py-1 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 font-semibold transition-colors text-[11px]"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -1052,124 +1110,124 @@ export default function AdminHomePage() {
 
               <div className="rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[960px] text-left text-xs">
+                  <table className="w-full min-w-[960px] text-left text-xs">
 
-                  <thead className="bg-[var(--color-bg-canvas)]">
-                    <tr>
-                      <th className="py-3 px-4">
-                        Code
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Name
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Development Role
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Duration
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Status
-                      </th>
-
-                      <th className="py-3 px-4 text-right">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-[var(--color-border-default)]">
-
-                    {phases.length === 0 ? (
+                    <thead className="bg-[var(--color-bg-canvas)]">
                       <tr>
-                        <td
-                          colSpan={6}
-                          className="py-10 text-center text-[var(--color-text-muted)]"
-                        >
-                          No phases found.
-                        </td>
+                        <th className="py-3 px-4">
+                          Code
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Name
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Development Role
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Duration
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Status
+                        </th>
+
+                        <th className="py-3 px-4 text-right">
+                          Actions
+                        </th>
                       </tr>
-                    ) : (
-                      phases.map((phase) => (
-                        <tr key={phase.id}>
+                    </thead>
 
-                          <td className="py-3 px-4 font-bold text-[var(--color-brand-blue)]">
-                            {phase.code}
+                    <tbody className="divide-y divide-[var(--color-border-default)]">
+
+                      {phases.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="py-10 text-center text-[var(--color-text-muted)]"
+                          >
+                            No phases found.
                           </td>
-
-                          <td className="py-3 px-4 font-bold">
-                            {phase.name}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {phase.development_role}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {phase.duration_weeks} Weeks
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {phase.is_active
-                              ? "Active"
-                              : "Inactive"}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            <div className="flex justify-end gap-2">
-
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedPhase(phase);
-                                  setShowPhaseModal(true);
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] font-semibold"
-                              >
-                                Edit
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (
-                                    !window.confirm(
-                                      `Delete phase "${phase.name}"?`
-                                    )
-                                  ) {
-                                    return;
-                                  }
-
-                                  try {
-                                    await deletePhase(
-                                      phase.id
-                                    );
-
-                                    await loadData();
-                                  } catch (err: unknown) {
-                                    window.alert(
-                                      getErrorMessage(err, "Unable to delete phase.")
-                                    );
-                                  }
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold"
-                              >
-                                Delete
-                              </button>
-
-                            </div>
-                          </td>
-
                         </tr>
-                      ))
-                    )}
+                      ) : (
+                        phases.map((phase) => (
+                          <tr key={phase.id}>
 
-                  </tbody>
-                </table>
+                            <td className="py-3 px-4 font-bold text-[var(--color-brand-blue)]">
+                              {phase.code}
+                            </td>
+
+                            <td className="py-3 px-4 font-bold">
+                              {phase.name}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {phase.development_role}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {phase.duration_weeks} Weeks
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {phase.is_active
+                                ? "Active"
+                                : "Inactive"}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="flex justify-end gap-2">
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPhase(phase);
+                                    setShowPhaseModal(true);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] font-semibold"
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (
+                                      !window.confirm(
+                                        `Delete phase "${phase.name}"?`
+                                      )
+                                    ) {
+                                      return;
+                                    }
+
+                                    try {
+                                      await deletePhase(
+                                        phase.id
+                                      );
+
+                                      await loadData();
+                                    } catch (err: unknown) {
+                                      window.alert(
+                                        getErrorMessage(err, "Unable to delete phase.")
+                                      );
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold"
+                                >
+                                  Delete
+                                </button>
+
+                              </div>
+                            </td>
+
+                          </tr>
+                        ))
+                      )}
+
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -1672,108 +1730,108 @@ export default function AdminHomePage() {
 
               <div className="rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-left text-xs">
+                  <table className="w-full min-w-[900px] text-left text-xs">
 
-                  <thead className="bg-[var(--color-bg-canvas)] border-b border-[var(--color-border-default)]">
-                    <tr className="text-[var(--color-text-muted)] uppercase tracking-wider font-semibold">
-                      <th className="py-3.5 px-4">Week</th>
-                      <th className="py-3.5 px-4">Title</th>
-                      <th className="py-3.5 px-4">
-                        Strategic Question
-                      </th>
-                      <th className="py-3.5 px-4">Sequence</th>
-                      <th className="py-3.5 px-4">Unlock</th>
-                      <th className="py-3.5 px-4 text-right">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-[var(--color-border-default)]">
-                    {weeks.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={6}
-                          className="py-10 text-center text-[var(--color-text-muted)]"
-                        >
-                          No weeks found.
-                        </td>
+                    <thead className="bg-[var(--color-bg-canvas)] border-b border-[var(--color-border-default)]">
+                      <tr className="text-[var(--color-text-muted)] uppercase tracking-wider font-semibold">
+                        <th className="py-3.5 px-4">Week</th>
+                        <th className="py-3.5 px-4">Title</th>
+                        <th className="py-3.5 px-4">
+                          Strategic Question
+                        </th>
+                        <th className="py-3.5 px-4">Sequence</th>
+                        <th className="py-3.5 px-4">Unlock</th>
+                        <th className="py-3.5 px-4 text-right">
+                          Actions
+                        </th>
                       </tr>
-                    ) : (
-                      weeks.map((week) => (
-                        <tr
-                          key={week.id}
-                          className="hover:bg-[var(--color-bg-canvas)]"
-                        >
-                          <td className="py-3 px-4 font-bold text-[var(--color-brand-orange)]">
-                            Week {week.week_number}
-                          </td>
+                    </thead>
 
-                          <td className="py-3 px-4 font-bold">
-                            {week.title}
-                          </td>
-
-                          <td className="py-3 px-4 text-[var(--color-text-muted)]">
-                            {week.strategic_question || "—"}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {week.sequence}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            {week.unlock_at
-                              ? new Date(
-                                week.unlock_at
-                              ).toLocaleString()
-                              : "Not scheduled"}
-                          </td>
-
-                          <td className="py-3 px-4">
-                            <div className="flex justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedWeek(week);
-                                  setShowWeekModal(true);
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] font-semibold hover:text-[var(--color-brand-blue)]"
-                              >
-                                Edit
-                              </button>
-
-                              <button
-                                type="button"
-                                onClick={async () => {
-                                  if (
-                                    !window.confirm(
-                                      `Delete Week ${week.week_number} - "${week.title}"?`
-                                    )
-                                  ) {
-                                    return;
-                                  }
-
-                                  try {
-                                    await deleteWeek(week.id);
-                                    await loadData();
-                                  } catch (err: unknown) {
-                                    window.alert(
-                                      getErrorMessage(err, "Unable to delete week.")
-                                    );
-                                  }
-                                }}
-                                className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold hover:bg-red-50"
-                              >
-                                Delete
-                              </button>
-                            </div>
+                    <tbody className="divide-y divide-[var(--color-border-default)]">
+                      {weeks.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="py-10 text-center text-[var(--color-text-muted)]"
+                          >
+                            No weeks found.
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
+                      ) : (
+                        weeks.map((week) => (
+                          <tr
+                            key={week.id}
+                            className="hover:bg-[var(--color-bg-canvas)]"
+                          >
+                            <td className="py-3 px-4 font-bold text-[var(--color-brand-orange)]">
+                              Week {week.week_number}
+                            </td>
 
-                </table>
+                            <td className="py-3 px-4 font-bold">
+                              {week.title}
+                            </td>
+
+                            <td className="py-3 px-4 text-[var(--color-text-muted)]">
+                              {week.strategic_question || "—"}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {week.sequence}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              {week.unlock_at
+                                ? new Date(
+                                  week.unlock_at
+                                ).toLocaleString()
+                                : "Not scheduled"}
+                            </td>
+
+                            <td className="py-3 px-4">
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedWeek(week);
+                                    setShowWeekModal(true);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] font-semibold hover:text-[var(--color-brand-blue)]"
+                                >
+                                  Edit
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    if (
+                                      !window.confirm(
+                                        `Delete Week ${week.week_number} - "${week.title}"?`
+                                      )
+                                    ) {
+                                      return;
+                                    }
+
+                                    try {
+                                      await deleteWeek(week.id);
+                                      await loadData();
+                                    } catch (err: unknown) {
+                                      window.alert(
+                                        getErrorMessage(err, "Unable to delete week.")
+                                      );
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold hover:bg-red-50"
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+
+                  </table>
                 </div>
               </div>
             </div>
@@ -1830,193 +1888,193 @@ export default function AdminHomePage() {
 
               <div className="rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[960px] text-left text-xs">
+                  <table className="w-full min-w-[960px] text-left text-xs">
 
-                  <thead className="bg-[var(--color-bg-canvas)] border-b">
-                    <tr>
-                      <th className="py-3 px-4">Session</th>
-                      <th className="py-3 px-4">Title</th>
-                      <th className="py-3 px-4">Week</th>
-                      <th className="py-3 px-4">Date / Time</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Actions</th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-[var(--color-border-default)]">
-
-                    {filteredSessions.length === 0 ? (
+                    <thead className="bg-[var(--color-bg-canvas)] border-b">
                       <tr>
-                        <td
-                          colSpan={6}
-                          className="py-10 text-center text-[var(--color-text-muted)]"
-                        >
-                          No sessions found for the selected Cohort.
-                        </td>
+                        <th className="py-3 px-4">Session</th>
+                        <th className="py-3 px-4">Title</th>
+                        <th className="py-3 px-4">Week</th>
+                        <th className="py-3 px-4">Date / Time</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
                       </tr>
-                    ) : (
-                      filteredSessions.map((session) => {
-                        const week = weeks.find(
-                          (w) => w.id === session.week_id
-                        );
+                    </thead>
 
-                        return (
-                          <tr key={session.id}>
+                    <tbody className="divide-y divide-[var(--color-border-default)]">
 
-                            <td className="py-3 px-4 font-bold">
-                              Session {session.session_number}
-                            </td>
+                      {filteredSessions.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={6}
+                            className="py-10 text-center text-[var(--color-text-muted)]"
+                          >
+                            No sessions found for the selected Cohort.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredSessions.map((session) => {
+                          const week = weeks.find(
+                            (w) => w.id === session.week_id
+                          );
 
-                            <td className="py-3 px-4">
-                              <div className="font-bold">
-                                {session.title}
-                              </div>
+                          return (
+                            <tr key={session.id}>
 
-                              <div className="text-[10px] text-[var(--color-text-muted)]">
-                                {session.session_type}
-                              </div>
-                            </td>
+                              <td className="py-3 px-4 font-bold">
+                                Session {session.session_number}
+                              </td>
 
-                            <td className="py-3 px-4">
-                              {week
-                                ? `Week ${week.week_number}`
-                                : "Session 0 / No Week"}
-                            </td>
+                              <td className="py-3 px-4">
+                                <div className="font-bold">
+                                  {session.title}
+                                </div>
 
-                            <td className="py-3 px-4">
-                              {session.start_at
-                                ? new Date(
-                                  session.start_at
-                                ).toLocaleString()
-                                : "Schedule not announced"}
-                            </td>
+                                <div className="text-[10px] text-[var(--color-text-muted)]">
+                                  {session.session_type}
+                                </div>
+                              </td>
 
-                            <td className="py-3 px-4">
-                              <div className="flex flex-col gap-1">
-                                <span className="capitalize">
-                                  {session.status}
-                                </span>
+                              <td className="py-3 px-4">
+                                {week
+                                  ? `Week ${week.week_number}`
+                                  : "Session 0 / No Week"}
+                              </td>
 
-                                <span
-                                  className={`inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-bold ${session.is_unlocked
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-amber-50 text-amber-7 00 border border-amber-200"
-                                    }`}
-                                >
+                              <td className="py-3 px-4">
+                                {session.start_at
+                                  ? new Date(
+                                    session.start_at
+                                  ).toLocaleString()
+                                  : "Schedule not announced"}
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col gap-1">
+                                  <span className="capitalize">
+                                    {session.status}
+                                  </span>
+
+                                  <span
+                                    className={`inline-flex w-fit px-2 py-0.5 rounded-full text-[10px] font-bold ${session.is_unlocked
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                      : "bg-amber-50 text-amber-7 00 border border-amber-200"
+                                      }`}
+                                  >
+                                    {session.is_unlocked ? (
+                                      <>
+                                        <Unlock className="w-3 h-3" />
+                                        Unlocked
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Lock className="w-3 h-3" />
+                                        Locked
+                                      </>
+                                    )}
+                                  </span>
+                                </div>
+                              </td>
+
+                              <td className="py-3 px-4">
+                                <div className="flex justify-end gap-2">
                                   {session.is_unlocked ? (
-                                    <>
-                                      <Unlock className="w-3 h-3" />
-                                      Unlocked
-                                    </>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (
+                                          !window.confirm(
+                                            `Lock Session ${session.session_number}? Fellows will lose access to this Session and its content.`
+                                          )
+                                        ) {
+                                          return;
+                                        }
+
+                                        try {
+                                          await lockSession(session.id);
+                                          await loadData();
+                                        } catch (err: unknown) {
+                                          window.alert(
+                                            getErrorMessage(err, "Unable to lock session.")
+                                          );
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 font-semibold"
+                                    >
+                                      Lock
+                                    </button>
                                   ) : (
-                                    <>
-                                      <Lock className="w-3 h-3" />
-                                      Locked
-                                    </>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        if (
+                                          !window.confirm(
+                                            `Unlock Session ${session.session_number}? Fellows will gain access to this Session and its content.`
+                                          )
+                                        ) {
+                                          return;
+                                        }
+
+                                        try {
+                                          await unlockSession(session.id);
+                                          await loadData();
+                                        } catch (err: unknown) {
+                                          window.alert(
+                                            getErrorMessage(err, "Unable to unlock session.")
+                                          );
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 font-semibold"
+                                    >
+                                      Unlock
+                                    </button>
                                   )}
-                                </span>
-                              </div>
-                            </td>
 
-                            <td className="py-3 px-4">
-                              <div className="flex justify-end gap-2">
-                                {session.is_unlocked ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedSession(session);
+                                      setShowSessionModal(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg border font-semibold"
+                                  >
+                                    Edit
+                                  </button>
+
                                   <button
                                     type="button"
                                     onClick={async () => {
                                       if (
                                         !window.confirm(
-                                          `Lock Session ${session.session_number}? Fellows will lose access to this Session and its content.`
+                                          `Delete "${session.title}"?`
                                         )
                                       ) {
                                         return;
                                       }
 
                                       try {
-                                        await lockSession(session.id);
+                                        await deleteSession(session.id);
                                         await loadData();
                                       } catch (err: unknown) {
                                         window.alert(
-                                          getErrorMessage(err, "Unable to lock session.")
+                                          getErrorMessage(err, "Unable to delete session.")
                                         );
                                       }
                                     }}
-                                    className="px-3 py-1.5 rounded-lg border border-amber-200 text-amber-700 font-semibold"
+                                    className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold"
                                   >
-                                    Lock
+                                    Delete
                                   </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      if (
-                                        !window.confirm(
-                                          `Unlock Session ${session.session_number}? Fellows will gain access to this Session and its content.`
-                                        )
-                                      ) {
-                                        return;
-                                      }
 
-                                      try {
-                                        await unlockSession(session.id);
-                                        await loadData();
-                                      } catch (err: unknown) {
-                                        window.alert(
-                                          getErrorMessage(err, "Unable to unlock session.")
-                                        );
-                                      }
-                                    }}
-                                    className="px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 font-semibold"
-                                  >
-                                    Unlock
-                                  </button>
-                                )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
 
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedSession(session);
-                                    setShowSessionModal(true);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg border font-semibold"
-                                >
-                                  Edit
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (
-                                      !window.confirm(
-                                        `Delete "${session.title}"?`
-                                      )
-                                    ) {
-                                      return;
-                                    }
-
-                                    try {
-                                      await deleteSession(session.id);
-                                      await loadData();
-                                    } catch (err: unknown) {
-                                      window.alert(
-                                        getErrorMessage(err, "Unable to delete session.")
-                                      );
-                                    }
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold"
-                                >
-                                  Delete
-                                </button>
-
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
-
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -2054,193 +2112,227 @@ export default function AdminHomePage() {
 
               <div className="rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[900px] text-left text-xs">
+                  <table className="w-full min-w-[900px] text-left text-xs">
 
-                  <thead className="bg-[var(--color-bg-canvas)] border-b">
-                    <tr>
-                      <th className="py-3 px-4">
-                        Resource
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Scope
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Type
-                      </th>
-
-                      <th className="py-3 px-4">
-                        Status
-                      </th>
-
-                      <th className="py-3 px-4 text-right">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-
-
-                  <tbody className="divide-y divide-[var(--color-border-default)]">
-
-                    {resources.length === 0 ? (
+                    <thead className="bg-[var(--color-bg-canvas)] border-b">
                       <tr>
-                        <td
-                          colSpan={5}
-                          className="py-10 text-center text-[var(--color-text-muted)]"
-                        >
-                          No resources added yet.
-                        </td>
+                        <th className="py-3 px-4">
+                          Resource
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Scope
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Type
+                        </th>
+
+                        <th className="py-3 px-4">
+                          Status
+                        </th>
+
+                        <th className="py-3 px-4 text-right">
+                          Actions
+                        </th>
                       </tr>
-                    ) : (
-                      resources.map((resource) => {
-                        const session = resource.session_id
-                          ? sessions.find(
-                            (item) =>
-                              item.id === resource.session_id
-                          )
-                          : null;
+                    </thead>
 
-                        const cohort = session
-                          ? cohorts.find(
-                            (item) =>
-                              item.id === session.cohort_id
-                          )
-                          : null;
 
-                        return (
-                          <tr key={resource.id}>
+                    <tbody className="divide-y divide-[var(--color-border-default)]">
 
-                            <td className="py-3 px-4">
-                              <div className="font-bold">
-                                {resource.title}
-                              </div>
+                      {resources.length === 0 ? (
+                        <tr>
+                          <td
+                            colSpan={5}
+                            className="py-10 text-center text-[var(--color-text-muted)]"
+                          >
+                            No resources added yet.
+                          </td>
+                        </tr>
+                      ) : (
+                        resources.map((resource) => {
+                          const session = resource.session_id
+                            ? sessions.find(
+                              (item) =>
+                                item.id === resource.session_id
+                            )
+                            : null;
 
-                              {resource.subtitle && (
-                                <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                                  {resource.subtitle}
+                          const cohort = session
+                            ? cohorts.find(
+                              (item) =>
+                                item.id === session.cohort_id
+                            )
+                            : null;
+
+                          return (
+                            <tr key={resource.id}>
+
+                              <td className="py-3 px-4">
+                                <div className="font-bold">
+                                  {resource.title}
                                 </div>
-                              )}
 
-                              {resource.url && (
-                                <a
-                                  href={resource.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-1 mt-1 text-[10px] text-[var(--color-brand-blue)]"
+                                {resource.subtitle && (
+                                  <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                                    {resource.subtitle}
+                                  </div>
+                                )}
+
+                                {resource.url && (
+                                  <a
+                                    href={resource.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 mt-1 text-[10px] text-[var(--color-brand-blue)]"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                    Open
+                                  </a>
+                                )}
+                              </td>
+
+
+                              <td className="py-3 px-4">
+                                {session ? (
+                                  <div>
+                                    <div className="font-semibold">
+                                      Session {session.session_number}
+                                    </div>
+
+                                    <div className="text-[10px] text-[var(--color-text-muted)]">
+                                      {cohort?.name ?? "Cohort"} — {session.title}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="inline-flex px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">
+                                    Phase Toolkit
+                                  </span>
+                                )}
+                              </td>
+
+
+                              <td className="py-3 px-4 capitalize">
+                                {resource.resource_type}
+                              </td>
+
+
+                              <td className="py-3 px-4">
+                                <span
+                                  className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold ${resource.is_active
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-slate-100 text-slate-600"
+                                    }`}
                                 >
-                                  <ExternalLink className="w-3 h-3" />
-                                  Open
-                                </a>
-                              )}
-                            </td>
-
-
-                            <td className="py-3 px-4">
-                              {session ? (
-                                <div>
-                                  <div className="font-semibold">
-                                    Session {session.session_number}
-                                  </div>
-
-                                  <div className="text-[10px] text-[var(--color-text-muted)]">
-                                    {cohort?.name ?? "Cohort"} — {session.title}
-                                  </div>
-                                </div>
-                              ) : (
-                                <span className="inline-flex px-2 py-1 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold">
-                                  Phase Toolkit
+                                  {resource.is_active
+                                    ? "Active"
+                                    : "Inactive"}
                                 </span>
-                              )}
-                            </td>
+                              </td>
 
 
-                            <td className="py-3 px-4 capitalize">
-                              {resource.resource_type}
-                            </td>
+                              <td className="py-3 px-4">
+                                <div className="flex justify-end gap-2">
+
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedResource(resource);
+                                      setShowResourceModal(true);
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] font-semibold"
+                                  >
+                                    Edit
+                                  </button>
 
 
-                            <td className="py-3 px-4">
-                              <span
-                                className={`inline-flex px-2 py-1 rounded-full text-[10px] font-bold ${resource.is_active
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : "bg-slate-100 text-slate-600"
-                                  }`}
-                              >
-                                {resource.is_active
-                                  ? "Active"
-                                  : "Inactive"}
-                              </span>
-                            </td>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      if (
+                                        !window.confirm(
+                                          `Delete "${resource.title}"?`
+                                        )
+                                      ) {
+                                        return;
+                                      }
 
+                                      try {
+                                        await deleteResource(
+                                          resource.id
+                                        );
 
-                            <td className="py-3 px-4">
-                              <div className="flex justify-end gap-2">
+                                        await loadData();
+                                      } catch (err: unknown) {
+                                        window.alert(
+                                          getErrorMessage(err, "Unable to delete Resource.")
+                                        );
+                                      }
+                                    }}
+                                    className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold"
+                                  >
+                                    Delete
+                                  </button>
 
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedResource(resource);
-                                    setShowResourceModal(true);
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg border border-[var(--color-border-default)] font-semibold"
-                                >
-                                  Edit
-                                </button>
+                                </div>
+                              </td>
 
+                            </tr>
+                          );
+                        })
+                      )}
 
-                                <button
-                                  type="button"
-                                  onClick={async () => {
-                                    if (
-                                      !window.confirm(
-                                        `Delete "${resource.title}"?`
-                                      )
-                                    ) {
-                                      return;
-                                    }
-
-                                    try {
-                                      await deleteResource(
-                                        resource.id
-                                      );
-
-                                      await loadData();
-                                    } catch (err: unknown) {
-                                      window.alert(
-                                        getErrorMessage(err, "Unable to delete Resource.")
-                                      );
-                                    }
-                                  }}
-                                  className="px-3 py-1.5 rounded-lg border border-red-200 text-red-600 font-semibold"
-                                >
-                                  Delete
-                                </button>
-
-                              </div>
-                            </td>
-
-                          </tr>
-                        );
-                      })
-                    )}
-
-                  </tbody>
-                </table>
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
             </div>
           )}
 
+          {/* MENTORS */}
+          {activeTab === "Mentors" && (
+            <MentorManagementTab
+              cohorts={cohorts}
+              teams={teams}
+              sessions={sessions}
+            />
+          )}
+
+          {/* WORKING BOARDS */}
+          {activeTab === "Working Boards" && (
+            <WorkingBoardManagementTab
+              cohorts={cohorts}
+              weeks={weeks}
+              sessions={sessions}
+              teams={teams}
+            />
+          )}
+
           {/* CHECKLIST */}
           {activeTab === "Checklist" && (
             <div className="space-y-6">
+              {/* Instructions banner required by Function 1 */}
+              <div className="rounded-2xl border border-[var(--color-brand-orange-subtle)] bg-orange-50/70 p-4 text-xs text-[var(--color-brand-navy)] flex items-start gap-3">
+                <div className="rounded-lg bg-[var(--color-brand-orange)]/15 p-2 text-[var(--color-brand-orange)] shrink-0">
+                  <ClipboardList className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-[var(--color-brand-orange)]">
+                    Session Checklist Instructions
+                  </h3>
+                  <p className="mt-1 text-xs text-[var(--color-text-body)] leading-relaxed">
+                    Create checklist items based on the session requirements. Fellows will see these items under the relevant session.
+                  </p>
+                </div>
+              </div>
+
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-extrabold">Fellow Checklist</h2>
                   <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-                    Manage dynamic Fellow actions and target them by program scope.
+                    Manage dynamic Fellow actions and target them by cohort, week, or session.
                   </p>
                 </div>
                 <button
@@ -2249,11 +2341,104 @@ export default function AdminHomePage() {
                     setSelectedChecklistItem(null);
                     setShowChecklistItemModal(true);
                   }}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-blue)] px-4 py-2 text-xs font-bold text-white"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-blue)] px-4 py-2 text-xs font-bold text-white hover:bg-blue-600 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
                   Create Checklist Item
                 </button>
+              </div>
+
+              {/* Cascading Scope Filters: Batch/Cohort -> Week -> Session */}
+              <div className="rounded-2xl border border-[var(--color-border-default)] bg-white p-4 space-y-3">
+                <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)]">
+                  Filter Checklist by Scope
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">
+                      1. Select Batch / Cohort
+                    </label>
+                    <select
+                      value={checklistCohortFilter}
+                      onChange={(e) => {
+                        setChecklistCohortFilter(e.target.value);
+                        setChecklistWeekFilter("all");
+                        setChecklistSessionFilter("all");
+                      }}
+                      className="w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3 py-2 text-xs text-[var(--color-text-primary)]"
+                    >
+                      <option value="all">All Batches / Cohorts</option>
+                      {cohorts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">
+                      2. Select Week
+                    </label>
+                    <select
+                      value={checklistWeekFilter}
+                      onChange={(e) => {
+                        setChecklistWeekFilter(e.target.value);
+                        setChecklistSessionFilter("all");
+                      }}
+                      className="w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3 py-2 text-xs text-[var(--color-text-primary)]"
+                    >
+                      <option value="all">All Weeks</option>
+                      {checklistAvailableWeeks.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          Week {w.week_number} — {w.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-[var(--color-text-muted)] mb-1">
+                      3. Select Session
+                    </label>
+                    <select
+                      value={checklistSessionFilter}
+                      onChange={(e) => setChecklistSessionFilter(e.target.value)}
+                      className="w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3 py-2 text-xs text-[var(--color-text-primary)]"
+                    >
+                      <option value="all">All Sessions</option>
+                      {checklistAvailableSessions.map((s) => {
+                        const cohort = cohorts.find((c) => c.id === s.cohort_id);
+                        return (
+                          <option key={s.id} value={s.id}>
+                            {cohort ? `${cohort.name} — ` : ""}Session {s.session_number}: {s.title}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+
+                {checklistSessionFilter !== "all" && (() => {
+                  const currentSession = sessions.find((s) => s.id === checklistSessionFilter);
+                  return (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2 border-t border-[var(--color-border-default)]">
+                      <span className="text-xs font-semibold text-[var(--color-brand-blue)]">
+                        Showing checklist associated with Session {currentSession?.session_number}: {currentSession?.title}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedChecklistItem(null);
+                          setShowChecklistItemModal(true);
+                        }}
+                        className="text-xs font-bold text-[var(--color-brand-orange)] hover:underline self-start sm:self-auto"
+                      >
+                        + Add Checklist Item to this Session
+                      </button>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="overflow-hidden rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
@@ -2270,14 +2455,14 @@ export default function AdminHomePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--color-border-default)]">
-                      {checklistItems.length === 0 ? (
+                      {filteredChecklistItems.length === 0 ? (
                         <tr>
                           <td colSpan={6} className="px-4 py-10 text-center text-[var(--color-text-muted)]">
-                            No checklist items have been created.
+                            No checklist items found for the selected scope.
                           </td>
                         </tr>
                       ) : (
-                        checklistItems.map((item) => {
+                        filteredChecklistItems.map((item) => {
                           const cohort = cohorts.find((entry) => entry.id === item.cohort_id);
                           const phase = phases.find((entry) => entry.id === item.phase_id);
                           const week = weeks.find((entry) => entry.id === item.week_id);
@@ -2373,11 +2558,11 @@ export default function AdminHomePage() {
 
               <div>
                 <h2 className="text-xl font-extrabold">
-                  Team Submissions
+                  Team Working Boards & Submissions
                 </h2>
 
                 <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                  Review Team submissions for each DISCOVER Session.
+                  Review Team working boards and deliverable submissions for each DISCOVER Session.
                 </p>
               </div>
 
@@ -2495,125 +2680,130 @@ export default function AdminHomePage() {
                 !weeklyOutputError && (
                   <div className="rounded-2xl bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] overflow-hidden">
                     <div className="overflow-x-auto">
-                    <table className="w-full min-w-[900px] text-left text-xs">
+                      <table className="w-full min-w-[900px] text-left text-xs">
 
-                      <thead className="bg-[var(--color-bg-canvas)] border-b">
-                        <tr>
-                          <th className="py-3 px-4">
-                            Team
-                          </th>
-
-                          <th className="py-3 px-4">
-                            Team Lead
-                          </th>
-
-                          <th className="py-3 px-4">
-                            Status
-                          </th>
-
-                          <th className="py-3 px-4">
-                            Submitted
-                          </th>
-
-                          <th className="py-3 px-4 text-right">
-                            Action
-                          </th>
-                        </tr>
-                      </thead>
-
-                      <tbody className="divide-y divide-[var(--color-border-default)]">
-
-                        {weeklyOutputSubmissions.length === 0 ? (
+                        <thead className="bg-[var(--color-bg-canvas)] border-b">
                           <tr>
-                            <td
-                              colSpan={5}
-                              className="py-10 text-center text-[var(--color-text-muted)]"
-                            >
-                              No Teams found for this Session&apos;s Cohort.
-                            </td>
+                            <th className="py-3 px-4">
+                              Team
+                            </th>
+
+                            <th className="py-3 px-4">
+                              Team Lead
+                            </th>
+
+                            <th className="py-3 px-4">
+                              Status
+                            </th>
+
+                            <th className="py-3 px-4">
+                              Submitted
+                            </th>
+
+                            <th className="py-3 px-4 text-right">
+                              Action
+                            </th>
                           </tr>
-                        ) : (
-                          weeklyOutputSubmissions.map(
-                            (item) => (
-                              <tr key={item.team_id}>
+                        </thead>
 
-                                <td className="py-4 px-4 font-bold">
-                                  Team {item.team_name}
-                                </td>
+                        <tbody className="divide-y divide-[var(--color-border-default)]">
 
-                                <td className="py-4 px-4">
-                                  {item.team_lead_name ||
-                                    "No Team Lead assigned"}
-                                </td>
+                          {weeklyOutputSubmissions.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={5}
+                                className="py-10 text-center text-[var(--color-text-muted)]"
+                              >
+                                No Teams found for this Session&apos;s Cohort.
+                              </td>
+                            </tr>
+                          ) : (
+                            weeklyOutputSubmissions.map(
+                              (item) => (
+                                <tr key={item.team_id}>
 
-                                <td className="py-4 px-4">
-                                  {item.submission ? (
-                                    <span className="inline-flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                                      Submitted
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
-                                      Not Submitted
-                                    </span>
-                                  )}
-                                </td>
+                                  <td className="py-4 px-4 font-bold">
+                                    Team {item.team_name}
+                                  </td>
 
-                                <td className="py-4 px-4 text-[var(--color-text-muted)]">
-                                  {item.submission
-                                    ? new Date(
-                                      item.submission.submitted_at
-                                    ).toLocaleString()
-                                    : "—"}
-                                </td>
+                                  <td className="py-4 px-4">
+                                    {item.team_lead_name ||
+                                      "No Team Lead assigned"}
+                                  </td>
 
-                                <td className="py-4 px-4">
-                                  <div className="flex justify-end gap-2">
-
+                                  <td className="py-4 px-4">
                                     {item.submission ? (
-                                      <>
-                                        <a
-                                          href={item.submission.drive_url}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border-default)] text-xs font-bold hover:border-[var(--color-brand-blue)] hover:text-[var(--color-brand-blue)]"
-                                        >
-                                          <ExternalLink className="w-3.5 h-3.5" />
-                                          Open Submission
-                                        </a>
-
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setSelectedSubmissionForFeedback(item);
-                                            setShowSubmissionFeedbackModal(true);
-                                          }}
-                                          className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-brand-blue)] text-white text-xs font-bold"
-                                        >
-                                          <FileCheck className="w-3.5 h-3.5" />
-                                          Review Feedback
-                                        </button>
-                                      </>
+                                      <span className="inline-flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
+                                        Submitted
+                                      </span>
                                     ) : (
-                                      <span className="text-[var(--color-text-muted)]">
-                                        —
+                                      <span className="inline-flex px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold">
+                                        Not Submitted
                                       </span>
                                     )}
+                                  </td>
 
-                                  </div>
-                                </td>
+                                  <td className="py-4 px-4 text-[var(--color-text-muted)]">
+                                    {item.submission
+                                      ? new Date(
+                                        item.submission.submitted_at
+                                      ).toLocaleString()
+                                      : "—"}
+                                  </td>
 
-                              </tr>
+                                  <td className="py-4 px-4">
+                                    <div className="flex justify-end gap-2">
+
+                                      {item.submission ? (
+                                        <>
+                                          <a
+                                            href={item.submission.drive_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-border-default)] text-xs font-bold hover:border-[var(--color-brand-blue)] hover:text-[var(--color-brand-blue)]"
+                                          >
+                                            <ExternalLink className="w-3.5 h-3.5" />
+                                            Open Working Board
+                                          </a>
+
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setSelectedSubmissionForFeedback(item);
+                                              setShowSubmissionFeedbackModal(true);
+                                            }}
+                                            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[var(--color-brand-blue)] text-white text-xs font-bold"
+                                          >
+                                            <FileCheck className="w-3.5 h-3.5" />
+                                            Review Mentor Insights
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <span className="text-[var(--color-text-muted)]">
+                                          —
+                                        </span>
+                                      )}
+
+                                    </div>
+                                  </td>
+
+                                </tr>
+                              )
                             )
-                          )
-                        )}
+                          )}
 
-                      </tbody>
-                    </table>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}
 
             </div>
+          )}
+
+          {/* DISCOVER GATE REVIEWS */}
+          {activeTab === "Gate Reviews" && (
+            <DiscoverGateReviewsTab cohorts={cohorts} teams={teams} />
           )}
         </main>
       </div>
@@ -2819,6 +3009,9 @@ export default function AdminHomePage() {
           phases={phases}
           weeks={weeks}
           sessions={sessions}
+          initialCohortId={checklistCohortFilter !== "all" ? checklistCohortFilter : undefined}
+          initialWeekId={checklistWeekFilter !== "all" ? checklistWeekFilter : undefined}
+          initialSessionId={checklistSessionFilter !== "all" ? checklistSessionFilter : undefined}
           onClose={() => {
             setShowChecklistItemModal(false);
             setSelectedChecklistItem(null);

@@ -17,6 +17,9 @@ interface ChecklistItemModalProps {
   phases: AdminPhase[];
   weeks: AdminWeek[];
   sessions: AdminSession[];
+  initialCohortId?: string;
+  initialWeekId?: string;
+  initialSessionId?: string;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
 }
@@ -37,13 +40,19 @@ export function ChecklistItemModal({
   phases,
   weeks,
   sessions,
+  initialCohortId,
+  initialWeekId,
+  initialSessionId,
   onClose,
   onSaved,
 }: ChecklistItemModalProps) {
-  const [cohortId, setCohortId] = React.useState(item?.cohort_id ?? "");
+  const [cohortId, setCohortId] = React.useState(item?.cohort_id ?? initialCohortId ?? "");
   const [phaseId, setPhaseId] = React.useState(item?.phase_id ?? "");
-  const [weekId, setWeekId] = React.useState(item?.week_id ?? "");
-  const [sessionId, setSessionId] = React.useState(item?.session_id ?? "");
+  const [weekId, setWeekId] = React.useState(item?.week_id ?? initialWeekId ?? "");
+  const [sessionId, setSessionId] = React.useState(item?.session_id ?? initialSessionId ?? "");
+  const [requiredSubmissionSessionId, setRequiredSubmissionSessionId] = React.useState(
+    item?.required_submission_session_id ?? ""
+  );
   const [title, setTitle] = React.useState(item?.title ?? "");
   const [description, setDescription] = React.useState(item?.description ?? "");
   const [category, setCategory] = React.useState(item?.category ?? "");
@@ -78,6 +87,7 @@ export function ChecklistItemModal({
         phase_id: phaseId || null,
         week_id: weekId || null,
         session_id: sessionId || null,
+        required_submission_session_id: requiredSubmissionSessionId || null,
         title: title.trim(),
         description: description.trim() || null,
         category: category.trim() || null,
@@ -105,7 +115,9 @@ export function ChecklistItemModal({
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h3 className="text-lg font-extrabold">{item ? "Edit Checklist Item" : "Create Checklist Item"}</h3>
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">Target all Fellows or narrow this action to a Cohort, Phase, Week, or Session.</p>
+            <p className="mt-1 text-xs text-[var(--color-brand-orange)] font-medium">
+              Create checklist items based on the session requirements. Fellows will see these items under the relevant session.
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close checklist item modal" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-xl text-[var(--color-text-muted)] hover:bg-[var(--color-bg-subtle)]">×</button>
         </div>
@@ -138,6 +150,20 @@ export function ChecklistItemModal({
                 const cohort = cohorts.find((entry) => entry.id === session.cohort_id);
                 return <option key={session.id} value={session.id}>{cohort?.name ?? "Cohort"} — Session {session.session_number}: {session.title}</option>;
               })}
+            </select>
+          </label>
+          <label className="text-xs font-bold">Collaborative Work Session (optional)
+            <select
+              value={requiredSubmissionSessionId}
+              onChange={(event) => setRequiredSubmissionSessionId(event.target.value)}
+              className={`${fieldClass} mt-1 font-normal`}
+            >
+              <option value="">No linked Working Board</option>
+              {availableSessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  Session {session.session_number}: {session.title}
+                </option>
+              ))}
             </select>
           </label>
         </div>

@@ -8,7 +8,9 @@ import {
   Check,
   CheckCircle2,
   ClipboardCheck,
+  FileText,
   LoaderCircle,
+  MessageSquare,
   RefreshCw,
 } from "lucide-react";
 import { PortalShell } from "@/components/layout/portal-shell";
@@ -19,9 +21,11 @@ import {
 } from "@/lib/api/checklist";
 import type {
   ChecklistItem,
+  ChecklistReviewStatus,
   ChecklistStatus,
   FellowChecklistResponse,
 } from "@/lib/api/types";
+import { ChecklistResponseModal } from "@/components/checklist/checklist-response-modal";
 
 type ChecklistFilter = "all" | "todo" | "overdue" | "completed";
 
@@ -35,12 +39,55 @@ function formatDate(value: string | null) {
   return value ? dateFormatter.format(new Date(value)) : null;
 }
 
+function ReviewStatusBadge({
+  reviewStatus,
+  isCompleted,
+}: {
+  reviewStatus?: ChecklistReviewStatus | string;
+  isCompleted: boolean;
+}) {
+  const normalized = (reviewStatus || (isCompleted ? "pending_review" : "not_checked")).toLowerCase();
+
+  if (normalized === "accepted") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-700">
+        <CheckCircle2 className="h-3 w-3" />
+        Accepted
+      </span>
+    );
+  }
+
+  if (normalized === "rejected") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
+        <AlertCircle className="h-3 w-3" />
+        Rejected
+      </span>
+    );
+  }
+
+  if (normalized === "pending_review" || isCompleted) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-700">
+        <LoaderCircle className="h-3 w-3" />
+        Pending Review
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+      Not Checked
+    </span>
+  );
+}
+
 function ChecklistAction({ item }: { item: ChecklistItem }) {
   if (!item.action_url) return null;
 
   const label = item.action_label || "Open";
   const className =
-    "inline-flex min-h-9 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[var(--color-border-strong)] bg-white px-4 py-2 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand-orange)] hover:text-[var(--color-brand-orange)]";
+    "inline-flex min-h-8 shrink-0 items-center justify-center gap-1.5 rounded-full border border-[var(--color-border-strong)] bg-white px-3.5 py-1.5 text-xs font-bold text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-brand-orange)] hover:text-[var(--color-brand-orange)]";
 
   if (item.action_url.startsWith("/")) {
     return (
@@ -65,36 +112,48 @@ function ChecklistAction({ item }: { item: ChecklistItem }) {
 function ChecklistRow({
   item,
   saving,
-  onToggle,
+  onCheckClick,
+  onOpenResponseModal,
 }: {
   item: ChecklistItem;
   saving: boolean;
-  onToggle: (item: ChecklistItem) => void;
+  onCheckClick: (item: ChecklistItem) => void;
+  onOpenResponseModal: (item: ChecklistItem) => void;
 }) {
-  const completed = item.status === "completed";
+  const completed = item.review_status === "accepted" || item.status === "completed";
+  const submitted =
+    item.is_submitted ||
+    item.review_status === "pending_review" ||
+    item.review_status === "rejected" ||
+    Boolean(item.contribution || item.reflection || item.my_thoughts);
   const overdue = item.status === "overdue";
   const date = formatDate(completed ? item.completed_at : item.due_at);
+  const isRejected = item.review_status === "rejected";
 
   return (
     <article
-      className={`rounded-2xl border p-4 transition-colors sm:p-5 ${overdue
-        ? "border-red-200 bg-red-50"
-        : completed
-          ? "border-emerald-200 bg-emerald-50"
+      className={`rounded-2xl border p-4 transition-colors sm:p-5 ${
+        isRejected
+          ? "border-red-200 bg-red-50/40"
+          : overdue
+          ? "border-red-200 bg-red-50"
+          : completed
+          ? "border-emerald-200/80 bg-emerald-50/40"
           : "border-[var(--color-border-default)] bg-white"
-        }`}
+      }`}
     >
       <div className="flex min-w-0 items-start gap-3 sm:gap-4">
         <button
           type="button"
-          onClick={() => onToggle(item)}
+          onClick={() => onCheckClick(item)}
           disabled={saving}
-          aria-label={completed ? `Mark ${item.title} as pending` : `Mark ${item.title} as completed`}
+          aria-label={completed ? `View or edit response for ${item.title}` : `Check ${item.title}`}
           aria-pressed={completed}
-          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-orange)] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${completed
-            ? "border-[var(--color-success)] bg-[var(--color-success)] text-white"
-            : "border-[var(--color-border-strong)] bg-white text-transparent hover:border-[var(--color-brand-orange)]"
-            }`}
+          className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--color-brand-orange)] focus:ring-offset-2 disabled:cursor-wait disabled:opacity-60 ${
+            completed
+              ? "border-[var(--color-success)] bg-[var(--color-success)] text-white"
+              : "border-[var(--color-border-strong)] bg-white text-transparent hover:border-[var(--color-brand-orange)]"
+          }`}
         >
           {saving ? (
             <LoaderCircle className="h-4 w-4 animate-spin text-[var(--color-brand-orange)]" />
@@ -105,14 +164,18 @@ function ChecklistRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3
-                  className={`break-words font-bold text-[var(--color-text-primary)] ${completed ? "line-through opacity-65" : ""
-                    }`}
-                >
-                  {item.title}
-                </h3>
+            <div className="min-w-0 flex-1">
+              {/* Session name & Badges */}
+              <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                {item.session_name && (
+                  <span className="rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 border border-blue-100">
+                    {item.session_name}
+                  </span>
+                )}
+                <ReviewStatusBadge
+                  reviewStatus={item.review_status}
+                  isCompleted={completed}
+                />
                 {item.is_required && (
                   <span className="rounded-full bg-[var(--color-brand-orange-subtle)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--color-brand-orange)]">
                     Required
@@ -120,14 +183,37 @@ function ChecklistRow({
                 )}
               </div>
 
+              {/* Title */}
+              <div className="flex flex-wrap items-center gap-2">
+                <h3
+                  className={`break-words font-bold text-[var(--color-text-primary)] ${
+                    completed && item.review_status === "accepted" ? "line-through opacity-70" : ""
+                  }`}
+                >
+                  {item.title}
+                </h3>
+              </div>
+
+              {/* Description */}
               {item.description && (
                 <p className="mt-1 break-words text-sm leading-6 text-[var(--color-text-body)]">
                   {item.description}
                 </p>
               )}
 
+              {/* Rejection Reason Notice */}
+              {isRejected && item.rejection_reason && (
+                <div className="mt-3 rounded-xl border border-red-200 bg-red-100/60 p-3 text-xs text-red-900">
+                  <span className="font-bold uppercase tracking-wider text-[10px] text-red-700 block mb-0.5">
+                    Mentor Rejection Reason:
+                  </span>
+                  <p className="leading-relaxed whitespace-pre-wrap">{item.rejection_reason}</p>
+                </div>
+              )}
+
+              {/* Context info (Due date, Category) */}
               {(date || item.category) && (
-                <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-text-muted)]">
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--color-text-muted)]">
                   {date && (
                     <time suppressHydrationWarning className={overdue ? "font-semibold text-[var(--color-danger)]" : ""}>
                       {completed ? "Completed" : "Due"} {date}
@@ -137,8 +223,55 @@ function ChecklistRow({
                   {item.category && <span>{item.category}</span>}
                 </div>
               )}
+
+              {/* Fellow contribution / reflection summary snippet if filled */}
+              {(item.contribution || item.reflection || item.my_thoughts) && (
+                <div className="mt-3 rounded-xl border border-[var(--color-border-default)] bg-white/70 p-3 text-xs text-[var(--color-text-secondary)] space-y-1.5">
+                  {item.contribution && (
+                    <div>
+                      <span className="font-semibold text-[var(--color-text-primary)]">My Contribution: </span>
+                      <span className="line-clamp-2">{item.contribution}</span>
+                    </div>
+                  )}
+                  {item.reflection && (
+                    <div>
+                      <span className="font-semibold text-[var(--color-text-primary)]">Reflection: </span>
+                      <span className="line-clamp-2">{item.reflection}</span>
+                    </div>
+                  )}
+                  {item.my_thoughts && (
+                    <div>
+                      <span className="font-semibold text-[var(--color-text-primary)]">My Thoughts: </span>
+                      <span className="line-clamp-2">{item.my_thoughts}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Action Buttons: View/Edit Response, View Feedback, and Action URL */}
+              <div className="mt-3.5 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => onOpenResponseModal(item)}
+                  className="h-8 gap-1.5 rounded-full text-xs font-semibold border-[var(--color-border-strong)] text-[var(--color-text-primary)] hover:border-[var(--color-brand-orange)] hover:text-[var(--color-brand-orange)]"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  {submitted ? "View / Edit Response" : "Complete Response"}
+                </Button>
+
+                <Link
+                  href={`/checklist-feedback?itemId=${item.id}`}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-[var(--color-border-strong)] bg-white px-3 text-xs font-semibold text-[var(--color-text-primary)] transition-colors hover:border-[var(--color-brand-orange)] hover:text-[var(--color-brand-orange)]"
+                >
+                  <MessageSquare className="h-3.5 w-3.5" />
+                  View Feedback
+                </Link>
+
+                <ChecklistAction item={item} />
+              </div>
             </div>
-            <ChecklistAction item={item} />
           </div>
         </div>
       </div>
@@ -229,21 +362,22 @@ export default function NotificationsPage() {
     [filteredItems]
   );
 
-  async function toggleItem(item: ChecklistItem) {
-    setSavingIds((current) => new Set(current).add(item.id));
-    setError(null);
-    try {
-      await updateChecklistCompletion(item.id, !item.is_completed);
-      await loadChecklist(true);
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Unable to update this item.");
-    } finally {
-      setSavingIds((current) => {
-        const next = new Set(current);
-        next.delete(item.id);
-        return next;
-      });
-    }
+  const [modalItem, setModalItem] = useState<ChecklistItem | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  function handleOpenResponseModal(item: ChecklistItem) {
+    setModalItem(item);
+    setIsModalOpen(true);
+  }
+
+  function handleCheckClick(item: ChecklistItem) {
+    // If not completed or if clicking the checklist toggle, open modal per spec:
+    // "When the fellow checks an item, open a modal... After saving: store response, show Pending Review"
+    handleOpenResponseModal(item);
+  }
+
+  function handleResponseSaved(_updated: ChecklistItem) {
+    void loadChecklist(true);
   }
 
   const filters: Array<{ key: ChecklistFilter; label: string; count: number }> = [
@@ -254,24 +388,20 @@ export default function NotificationsPage() {
   ];
 
   return (
-    <PortalShell
-      breadcrumbItems={["Checklist"]}
-    >
+    <PortalShell breadcrumbItems={["Checklist"]}>
       <div className="space-y-6">
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-extrabold">
-              Checklist
-            </h1>
+            <h1 className="text-2xl font-extrabold">Checklist</h1>
             <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              Stay updated with fellowship actions and important updates.
+              Stay updated with fellowship actions, checklist responses, and mentor feedback.
             </p>
           </div>
 
           <div className="flex items-center gap-2.5">
             {lastRefreshedAt && (
               <span className="hidden sm:inline text-xs text-[var(--color-text-muted)] font-medium">
-                Updated {lastRefreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                Updated {lastRefreshedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </span>
             )}
             <Button
@@ -361,7 +491,13 @@ export default function NotificationsPage() {
                         </div>
                         <div className="space-y-3">
                           {group.items.map((item) => (
-                            <ChecklistRow key={item.id} item={item} saving={savingIds.has(item.id)} onToggle={toggleItem} />
+                            <ChecklistRow
+                              key={item.id}
+                              item={item}
+                              saving={savingIds.has(item.id)}
+                              onCheckClick={handleCheckClick}
+                              onOpenResponseModal={handleOpenResponseModal}
+                            />
                           ))}
                         </div>
                       </section>
@@ -381,6 +517,16 @@ export default function NotificationsPage() {
           </>
         )}
       </div>
+
+      <ChecklistResponseModal
+        item={modalItem}
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleResponseSaved}
+        onOpenFeedback={(item) => {
+          window.location.href = `/checklist-feedback?itemId=${item.id}`;
+        }}
+      />
     </PortalShell>
   );
 }

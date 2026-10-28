@@ -7,6 +7,7 @@ import { DiscoverHero } from "@/components/discover/discover-hero";
 import { LiveSessionSpotlight } from "@/components/discover/live-session-spotlight";
 import { FellowToolkit } from "@/components/discover/fellow-toolkit";
 import { FourWeekRoadmap } from "@/components/discover/four-week-roadmap";
+import { DiscoverGateResults } from "@/components/discover/gate-results";
 import { Button } from "@/components/ui/button";
 import { ApiError } from "@/lib/api/client";
 import { getFellowContext } from "@/lib/api/fellow";
@@ -204,6 +205,9 @@ export default function DiscoverDashboardPage() {
 
       {/* Zone 4: Full 4-Week Journey Stepper & Sessions */}
       <FourWeekRoadmap weeks={weeks} />
+
+      {/* Zone 5: DISCOVER Phase Gate Results */}
+      <DiscoverGateResults context={context} />
     </PortalShell>
   );
 }

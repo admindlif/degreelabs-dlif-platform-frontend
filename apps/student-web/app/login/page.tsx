@@ -244,6 +244,12 @@ function StudentLoginForm() {
                   <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">
                     Password
                   </label>
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-semibold text-[var(--color-brand-orange)] hover:underline transition-all cursor-pointer"
+                  >
+                    Forgot Password?
+                  </Link>
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-[var(--color-text-muted)] absolute left-3.5 top-1/2 -translate-y-1/2" />

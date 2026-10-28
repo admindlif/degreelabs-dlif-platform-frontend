@@ -197,6 +197,7 @@ export interface SubmissionFeedback {
 }
 
 export type ChecklistStatus = "pending" | "overdue" | "completed";
+export type ChecklistReviewStatus = "not_checked" | "pending_review" | "accepted" | "rejected";
 
 export interface ChecklistItem {
   id: string;
@@ -206,11 +207,40 @@ export interface ChecklistItem {
   due_at: string | null;
   status: ChecklistStatus;
   is_required: boolean;
+  is_submitted: boolean;
   is_completed: boolean;
   completed_at: string | null;
   action_label: string | null;
   action_url: string | null;
   sequence: number;
+
+  // Review workflow & context
+  session_id?: string | null;
+  session_name?: string | null;
+  week_number?: number | null;
+  cohort_name?: string | null;
+  contribution?: string | null;
+  reflection?: string | null;
+  my_thoughts?: string | null;
+  review_status?: ChecklistReviewStatus | string;
+  rejection_reason?: string | null;
+  reviewed_at?: string | null;
+}
+
+export interface ChecklistFeedbackMessage {
+  id: string;
+  checklist_item_id: string;
+  fellow_user_id: string;
+  author_user_id: string;
+  author_role: string;
+  message: string;
+  created_at: string;
+}
+
+export interface ChecklistFeedbackThreadResponse {
+  checklist_item_id: string;
+  fellow_user_id: string;
+  messages: ChecklistFeedbackMessage[];
 }
 
 export interface ChecklistSummary {
@@ -319,3 +349,85 @@ export interface FellowHomepageResponse {
 
 export type FellowHomepageData = FellowHomepageResponse | FellowshipPhase[];
 
+// --- Working Board & Mentor Insights ---
+
+export interface FellowWorkingBoardResponse {
+  id: string;
+  session_id: string;
+  team_id: string;
+  title: string;
+  working_board_url: string;
+  instructions: string | null;
+  is_published: boolean;
+  updated_at: string;
+  cta_text: string;
+}
+
+export interface FellowWorkingBoardInsightsResponse {
+  id: string;
+  working_board_id: string;
+  session_id: string;
+  team_id: string;
+  mentor_user_id: string;
+  mentor_name: string | null;
+  insights_text: string;
+  publication_status: string;
+  tagline: string;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+
+// --- Global Session Overview (Option B) ---
+
+export interface SessionOverviewData {
+  phase_code: string;
+  session_number: number;
+  purpose: string;
+  what_to_explore: string;
+  working_evidence: string;
+  source_document: string;
+  source_version: string;
+  source_page: number;
+}
+
+
+// --- Phase Gate Types (Fellow read-only) ---
+
+export interface PhaseGateDimension {
+  id: string;
+  dimension_key: string;
+  dimension_title: string;
+  sequence: number;
+  is_cleared: boolean | null;
+  mentor_comment: string | null;
+}
+
+export interface PhaseGateAssessment {
+  id: string;
+  team_id: string;
+  phase_gate_code: string;
+  status: "draft" | "submitted";
+  total_cleared: number;
+  total_uncleared: number;
+  mentor_notes: string | null;
+  submitted_at: string | null;
+  dimensions: PhaseGateDimension[];
+}
+
+export interface PhaseGateAssessmentResponse {
+  /** "not_submitted" when no assessment exists, otherwise the backend assessment status */
+  status?: "not_submitted" | "draft" | "submitted";
+  message?: string;
+  id?: string;
+  team_id?: string;
+  phase_gate_code?: string;
+  total_cleared?: number;
+  total_uncleared?: number;
+  mentor_notes?: string | null;
+  submitted_at?: string | null;
+  dimensions?: PhaseGateDimension[];
+  /** True when admin has approved VALIDATE progression for this team */
+  validate_unlocked?: boolean;
+}
