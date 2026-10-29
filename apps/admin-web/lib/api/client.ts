@@ -1,5 +1,5 @@
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { getApiBaseUrl } from "./config.ts";
+import { adminSessionClient, SessionNetworkError } from "../auth/session-client.ts";
 
 export class ApiError extends Error {
   status: number;
@@ -13,77 +13,51 @@ export class ApiError extends Error {
   }
 }
 
-export async function adminApiClient<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+export async function adminApiClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type")) {
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-
-  const normalizedEndpoint = endpoint.startsWith("/")
-    ? endpoint
-    : `/${endpoint}`;
-
-  const base = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
-
-  const path = normalizedEndpoint.startsWith("/api/v1")
-    ? normalizedEndpoint
-    : `/api/v1${normalizedEndpoint}`;
-
+  const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const base = getApiBaseUrl().replace(/\/api\/v1\/?$/, "");
+  const path = normalizedEndpoint.startsWith("/api/v1") ? normalizedEndpoint : `/api/v1${normalizedEndpoint}`;
   const url = `${base}${path}`;
+  const method = (options.method ?? "GET").toUpperCase();
+  const canRetry = ["GET", "HEAD", "OPTIONS"].includes(method);
+  const execute = () => fetch(url, { cache: "no-store", ...options, credentials: "include", headers });
 
-  const res = await fetch(url, {
-    cache: "no-store",
-    ...options,
-    credentials: "include",
-    headers,
-  });
+  let res = await execute();
+  if (res.status === 401) {
+    let renewed = false;
+    try {
+      renewed = await adminSessionClient.renewAccess();
+    } catch (error) {
+      if (error instanceof SessionNetworkError) {
+        throw new ApiError("The authentication service is temporarily unavailable. Your work has not been discarded.", 0);
+      }
+      throw error;
+    }
+    if (renewed && canRetry) res = await execute();
+    else if (renewed) throw new ApiError("Your session was renewed. Please submit this action again.", 401);
+  }
 
   if (!res.ok) {
     let errorData: unknown = null;
-
-    try {
-      errorData = await res.json();
-    } catch {
-      // Response may not contain JSON
+    try { errorData = await res.json(); } catch { /* Ignore non-JSON bodies. */ }
+    if (res.status === 401) {
+      throw new ApiError("Your session has expired. Please sign in again.", res.status, errorData);
     }
-
-    // 401 / 403 → the admin session has expired or the cookie was lost.
-    // Redirect to the login page so the admin can re-authenticate without
-    // needing to manually sign out and sign back in.
-    if (res.status === 401 || res.status === 403) {
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login?session_expired=1";
-      }
-      // Throw so the calling code stops processing immediately.
-      throw new ApiError(
-        "Your session has expired. Please sign in again.",
-        res.status,
-        errorData
-      );
+    const detail = typeof errorData === "object" && errorData !== null && "detail" in errorData &&
+      typeof (errorData as { detail: unknown }).detail === "string"
+      ? (errorData as { detail: string }).detail : null;
+    if (res.status === 403) {
+      throw new ApiError(detail || "You do not have permission to perform this action.", res.status, errorData);
     }
-
-    const detail =
-      typeof errorData === "object" &&
-        errorData !== null &&
-        "detail" in errorData &&
-        typeof errorData.detail === "string"
-        ? errorData.detail
-        : null;
-    const message =
-      detail || `Admin API Request failed with status ${res.status}`;
-
-    throw new ApiError(message, res.status, errorData);
+    throw new ApiError(detail || `Admin API request failed with status ${res.status}`, res.status, errorData);
   }
 
-  // DELETE endpoints usually return HTTP 204 with an empty body.
-  if (res.status === 204) {
-    return undefined as T;
-  }
-
-  return res.json();
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
 }
 
 export function getErrorMessage(error: unknown, fallback: string): string {
