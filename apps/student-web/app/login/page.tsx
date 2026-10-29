@@ -4,7 +4,18 @@ import * as React from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Shield, Lock, Mail, KeyRound, AlertCircle, ArrowRight, ArrowLeft, Loader2 } from "lucide-react";
+import {
+  Shield,
+  Lock,
+  Mail,
+  KeyRound,
+  AlertCircle,
+  ArrowRight,
+  ArrowLeft,
+  Loader2,
+  RefreshCw,
+  Smartphone,
+} from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api/config";
 
@@ -20,16 +31,11 @@ function responseDetail(data: unknown): string | null {
   return null;
 }
 
-function requiresTwoFactor(data: unknown): boolean | null {
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "requires_2fa" in data &&
-    typeof data.requires_2fa === "boolean"
-  ) {
-    return data.requires_2fa;
-  }
-  return null;
+interface LoginResponseData {
+  requires_2fa?: boolean;
+  available_methods?: ("authenticator" | "email_otp")[];
+  default_method?: "authenticator" | "email_otp";
+  masked_email?: string;
 }
 
 function StudentLoginForm() {
@@ -39,17 +45,70 @@ function StudentLoginForm() {
 
   const sessionExpired = searchParams.get("session_expired") === "1";
 
-  // Stage: 1 = Email + Password, 2 = 2FA TOTP / Recovery Code
+  // Stage: 1 = Email + Password, 2 = 2FA (Email OTP or Authenticator)
   const [stage, setStage] = React.useState<1 | 2>(1);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  // Stage 2 inputs
-  const [code, setCode] = React.useState("");
+
+  // Stage 2 state
+  const [verificationMethod, setVerificationMethod] = React.useState<"email_otp" | "authenticator">("authenticator");
+  const [availableMethods, setAvailableMethods] = React.useState<("authenticator" | "email_otp")[]>(["authenticator"]);
+  const [maskedEmail, setMaskedEmail] = React.useState<string | null>(null);
+
+  // Email OTP inputs & cooldown
+  const [otpCode, setOtpCode] = React.useState("");
+  const [cooldown, setCooldown] = React.useState(0);
+  const [otpSending, setOtpSending] = React.useState(false);
+
+  // Authenticator app inputs
+  const [totpCode, setTotpCode] = React.useState("");
   const [isRecoveryCode, setIsRecoveryCode] = React.useState(false);
 
   // Status
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Cooldown countdown timer
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const interval = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldown]);
+
+  const sendEmailOtp = React.useCallback(async () => {
+    setOtpSending(true);
+    setError(null);
+    try {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/v1/auth/email-otp/send`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "login" }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(responseDetail(data) ?? "Failed to send verification code. Please try again.");
+        return false;
+      }
+
+      if (typeof data === "object" && data !== null && "masked_email" in data && typeof data.masked_email === "string") {
+        setMaskedEmail(data.masked_email);
+      }
+      setCooldown(60);
+      return true;
+    } catch {
+      setError("Unable to connect to the authentication service. Please check your connection.");
+      return false;
+    } finally {
+      setOtpSending(false);
+    }
+  }, []);
 
   const handleStage1Submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,8 +145,9 @@ function StudentLoginForm() {
         return;
       }
 
-      const needsTwoFactor = requiresTwoFactor(data);
-      if (needsTwoFactor === false) {
+      const loginData = (data ?? {}) as LoginResponseData;
+
+      if (loginData.requires_2fa === false) {
         const success = await refreshUser();
         if (success) {
           router.push("/home");
@@ -98,8 +158,20 @@ function StudentLoginForm() {
         }
       }
 
-      if (needsTwoFactor === true) {
+      if (loginData.requires_2fa === true) {
+        const methods = loginData.available_methods ?? ["authenticator"];
+        const chosenMethod = loginData.default_method ?? (methods.includes("email_otp") ? "email_otp" : "authenticator");
+        setAvailableMethods(methods);
+        setVerificationMethod(chosenMethod);
+        if (loginData.masked_email) {
+          setMaskedEmail(loginData.masked_email);
+        }
         setStage(2);
+
+        // If default is Email OTP, send code immediately
+        if (chosenMethod === "email_otp") {
+          void sendEmailOtp();
+        }
       } else {
         setError("Unexpected response from authentication service.");
       }
@@ -110,18 +182,19 @@ function StudentLoginForm() {
     }
   };
 
-  const handleStage2Submit = async (e: React.FormEvent) => {
+  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
 
     try {
-      const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/2fa/verify`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/v1/auth/email-otp/verify`, {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim() }),
+        body: JSON.stringify({ code: otpCode.trim(), purpose: "login" }),
       });
 
       const data: unknown = await res.json().catch(() => null);
@@ -136,14 +209,12 @@ function StudentLoginForm() {
 
         if (challengeExpired) {
           setStage(1);
-          setCode("");
-          setError("Your 2FA session has expired. Please sign in again.");
+          setOtpCode("");
+          setError("Your verification session has expired. Please sign in again.");
           return;
         }
 
-        setError(
-          detail ?? "That authentication code is invalid or has expired."
-        );
+        setError(detail ?? "Invalid verification code.");
         return;
       }
 
@@ -151,16 +222,63 @@ function StudentLoginForm() {
       if (success) {
         router.push("/home");
       } else {
-        setError(
-          "Authentication succeeded, but your Fellow session could not be loaded. Please sign in again."
-        );
+        setError("Authentication succeeded, but your Fellow session could not be loaded. Please sign in again.");
         setStage(1);
-        setCode("");
+        setOtpCode("");
       }
     } catch {
-      setError(
-        "Unable to connect to the Fellow Portal service. Please try again shortly."
-      );
+      setError("Unable to connect to the Fellow Portal service. Please try again shortly.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyTotp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/v1/auth/2fa/verify`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: totpCode.trim() }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const detail = responseDetail(data);
+        const challengeExpired =
+          res.status === 401 &&
+          detail !== null &&
+          (detail.toLowerCase().includes("challenge") ||
+            detail.toLowerCase().includes("expired"));
+
+        if (challengeExpired) {
+          setStage(1);
+          setTotpCode("");
+          setError("Your 2FA session has expired. Please sign in again.");
+          return;
+        }
+
+        setError(detail ?? "That authentication code is invalid or has expired.");
+        return;
+      }
+
+      const success = await refreshUser();
+      if (success) {
+        router.push("/home");
+      } else {
+        setError("Authentication succeeded, but your Fellow session could not be loaded. Please sign in again.");
+        setStage(1);
+        setTotpCode("");
+      }
+    } catch {
+      setError("Unable to connect to the Fellow Portal service. Please try again shortly.");
     } finally {
       setLoading(false);
     }
@@ -193,14 +311,20 @@ function StudentLoginForm() {
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            {stage === 1 ? "Sign in to your Fellowship" : "Two-Factor Verification"}
+            {stage === 1
+              ? "Sign in to your Fellowship"
+              : verificationMethod === "email_otp"
+              ? "Email Verification Code"
+              : "Authenticator Verification"}
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
             {stage === 1
               ? "Access your DISCOVER phase, cohorts, and learning roadmaps."
+              : verificationMethod === "email_otp"
+              ? `Enter the 6-digit verification code sent to ${maskedEmail || "your email"}.`
               : isRecoveryCode
-                ? "Enter one of your one-time emergency recovery codes."
-                : "Enter the 6-digit code from your authenticator app."}
+              ? "Enter one of your one-time emergency recovery codes."
+              : "Enter the 6-digit code from your authenticator app."}
           </p>
         </div>
 
@@ -276,14 +400,115 @@ function StudentLoginForm() {
                   </>
                 ) : (
                   <>
-                    <span>Continue to 2FA</span>
+                    <span>Continue to Verification</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
             </form>
+          ) : verificationMethod === "email_otp" ? (
+            /* Stage 2 — Email OTP Verification Form */
+            <form onSubmit={handleVerifyEmailOtp} className="space-y-4">
+              <div className="flex items-center justify-center py-2">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] flex items-center justify-center text-[var(--color-brand-orange)]">
+                  <Mail className="w-7 h-7" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 text-center">
+                  6-Digit Verification Code
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-center text-xl font-mono tracking-widest text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-brand-orange)] transition-colors"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otpCode.trim().length !== 6}
+                className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <span>Verify and Sign In</span>
+                )}
+              </button>
+
+              {/* Resend OTP button with cooldown */}
+              <div className="text-center pt-1">
+                {cooldown > 0 ? (
+                  <span className="text-xs text-[var(--color-text-muted)]">
+                    Resend code in <strong className="text-[var(--color-text-primary)]">{cooldown}s</strong>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={otpSending}
+                    onClick={() => void sendEmailOtp()}
+                    className="text-xs font-semibold text-[var(--color-brand-orange)] hover:underline inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {otpSending ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Sending new code...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Didn&apos;t receive code? Resend Code</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+
+              {/* Method Switcher and Back to Stage 1 */}
+              <div className="flex flex-col gap-2.5 pt-3 border-t border-[var(--color-border-default)] text-xs">
+                {availableMethods.includes("authenticator") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerificationMethod("authenticator");
+                      setError(null);
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-[var(--color-bg-subtle)] hover:bg-[var(--color-border-default)] text-[var(--color-text-secondary)] font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-[var(--color-brand-orange)]" />
+                    <span>Use Authenticator App instead</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage(1);
+                    setOtpCode("");
+                    setError(null);
+                  }}
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] flex items-center justify-center gap-1 transition-colors cursor-pointer py-1"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  <span>Back to email and password</span>
+                </button>
+              </div>
+            </form>
           ) : (
-            <form onSubmit={handleStage2Submit} className="space-y-4">
+            /* Stage 2 — Authenticator App / Recovery Code Form */
+            <form onSubmit={handleVerifyTotp} className="space-y-4">
               <div className="flex items-center justify-center py-2">
                 <div className="w-14 h-14 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] flex items-center justify-center text-[var(--color-brand-orange)]">
                   {isRecoveryCode ? <KeyRound className="w-7 h-7" /> : <Shield className="w-7 h-7" />}
@@ -299,8 +524,8 @@ function StudentLoginForm() {
                   required
                   autoFocus
                   maxLength={isRecoveryCode ? 16 : 8}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value)}
                   placeholder={isRecoveryCode ? "e.g. 1a2b-3c4d" : "123456"}
                   className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-center text-lg font-mono tracking-widest text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-brand-orange)] transition-colors"
                 />
@@ -308,7 +533,7 @@ function StudentLoginForm() {
 
               <button
                 type="submit"
-                disabled={loading || code.trim().length === 0}
+                disabled={loading || totpCode.trim().length === 0}
                 className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {loading ? (
@@ -321,30 +546,48 @@ function StudentLoginForm() {
                 )}
               </button>
 
-              <div className="flex items-center justify-between pt-2 text-xs">
+              <div className="flex items-center justify-between pt-1 text-xs">
                 <button
                   type="button"
                   onClick={() => {
                     setIsRecoveryCode(!isRecoveryCode);
-                    setCode("");
+                    setTotpCode("");
                     setError(null);
                   }}
                   className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] underline underline-offset-2 transition-colors cursor-pointer"
                 >
                   {isRecoveryCode ? "Use Authenticator app code" : "Use a backup recovery code"}
                 </button>
+              </div>
+
+              {/* Method Switcher and Back to Stage 1 */}
+              <div className="flex flex-col gap-2.5 pt-3 border-t border-[var(--color-border-default)] text-xs">
+                {availableMethods.includes("email_otp") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerificationMethod("email_otp");
+                      setError(null);
+                      void sendEmailOtp();
+                    }}
+                    className="w-full py-2 px-3 rounded-lg bg-[var(--color-bg-subtle)] hover:bg-[var(--color-border-default)] text-[var(--color-text-secondary)] font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-[var(--color-brand-orange)]" />
+                    <span>Send verification code to my email instead</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
                   onClick={() => {
                     setStage(1);
-                    setCode("");
+                    setTotpCode("");
                     setError(null);
                   }}
-                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] flex items-center gap-1 transition-colors cursor-pointer"
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] flex items-center justify-center gap-1 transition-colors cursor-pointer py-1"
                 >
                   <ArrowLeft className="w-3 h-3" />
-                  <span>Back</span>
+                  <span>Back to email and password</span>
                 </button>
               </div>
             </form>
