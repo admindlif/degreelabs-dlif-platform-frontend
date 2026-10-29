@@ -1,15 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  calculateServerClockOffset,
   canExtendSession,
   formatSessionCountdown,
   getEffectiveDeadline,
   getRemainingSeconds,
   getSessionPhase,
+  getServerAdjustedNow,
   isAbsoluteExpiryPending,
   SESSION_WARNING_WINDOW_MS,
   type SessionDeadlines,
 } from "../session-policy.ts";
+
+test("server clock offset uses the request midpoint and corrects browser skew", () => {
+  const serverTime = "2026-10-29T12:00:00.100Z";
+  const started = Date.parse("2026-10-29T11:55:00.000Z");
+  const received = started + 200;
+  const offset = calculateServerClockOffset(serverTime, started, received);
+  assert.equal(offset, 5 * 60 * 1000);
+  assert.equal(getServerAdjustedNow(offset, received), Date.parse(serverTime) + 100);
+  assert.equal(calculateServerClockOffset("invalid", started, received), 0);
+});
 
 test("getEffectiveDeadline selects the earliest deadline", () => {
   assert.equal(SESSION_WARNING_WINDOW_MS, 5 * 60 * 1000);

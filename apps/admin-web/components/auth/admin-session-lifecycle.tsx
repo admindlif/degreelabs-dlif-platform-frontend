@@ -11,7 +11,9 @@ import {
 } from "@/lib/auth/session-client";
 import {
   ACTIVITY_THROTTLE_MS,
+  calculateServerClockOffset,
   canExtendSession,
+  getServerAdjustedNow,
   getRemainingSeconds,
   getSessionPhase,
   type SessionDeadlines,
@@ -42,6 +44,7 @@ export function AdminSessionLifecycle({ active, onLogout, onRemoteLogout }: Admi
   const pathname = usePathname();
   const [status, setStatus] = React.useState<SessionStatus | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
+  const [clockOffsetMs, setClockOffsetMs] = React.useState(0);
   const [expired, setExpired] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const lastActivity = React.useRef(0);
@@ -51,7 +54,16 @@ export function AdminSessionLifecycle({ active, onLogout, onRemoteLogout }: Admi
 
   const syncStatus = React.useCallback(async () => {
     try {
+      const requestStartedAt = Date.now();
       const next = await adminSessionClient.getStatus();
+      const responseReceivedAt = Date.now();
+      const offset = calculateServerClockOffset(
+        next.server_time,
+        requestStartedAt,
+        responseReceivedAt
+      );
+      setClockOffsetMs(offset);
+      setNow(getServerAdjustedNow(offset, responseReceivedAt));
       setStatus(next);
       if (!next.authenticated) setExpired(true);
     } catch (error) {
@@ -64,8 +76,17 @@ export function AdminSessionLifecycle({ active, onLogout, onRemoteLogout }: Admi
     if (!force && Date.now() - lastActivity.current < ACTIVITY_THROTTLE_MS) return;
     const work = (async () => {
       try {
+        const requestStartedAt = Date.now();
         const activity = await adminSessionClient.recordActivity();
+        const responseReceivedAt = Date.now();
         if (!activity) { setExpired(true); return; }
+        const offset = calculateServerClockOffset(
+          activity.server_time,
+          requestStartedAt,
+          responseReceivedAt
+        );
+        setClockOffsetMs(offset);
+        setNow(getServerAdjustedNow(offset, responseReceivedAt));
         lastActivity.current = Date.now();
         setExpired(false);
         const next = mergeActivity(status, activity);
@@ -96,9 +117,12 @@ export function AdminSessionLifecycle({ active, onLogout, onRemoteLogout }: Admi
 
   React.useEffect(() => {
     if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    const timer = window.setInterval(
+      () => setNow(getServerAdjustedNow(clockOffsetMs)),
+      1_000
+    );
     return () => window.clearInterval(timer);
-  }, [active]);
+  }, [active, clockOffsetMs]);
 
   React.useEffect(() => {
     if (!active) return;
@@ -121,7 +145,7 @@ export function AdminSessionLifecycle({ active, onLogout, onRemoteLogout }: Admi
     if (!active) return;
     const restored = () => {
       if (document.visibilityState === "visible") {
-        setNow(Date.now());
+        setNow(getServerAdjustedNow(clockOffsetMs));
         void syncStatus();
       }
     };
@@ -133,7 +157,7 @@ export function AdminSessionLifecycle({ active, onLogout, onRemoteLogout }: Admi
       window.removeEventListener("pageshow", restored);
       window.removeEventListener("focus", restored);
     };
-  }, [active, syncStatus]);
+  }, [active, clockOffsetMs, syncStatus]);
 
   const current = active ? status : null;
   const phase = hasDeadlines(current) ? getSessionPhase(current, now) : "active";

@@ -298,6 +298,7 @@ function StudentLoginForm() {
                   type="text"
                   required
                   autoFocus
+                  autoComplete="one-time-code"
                   maxLength={isRecoveryCode ? 16 : 8}
                   value={code}
                   onChange={(e) => setCode(e.target.value)}

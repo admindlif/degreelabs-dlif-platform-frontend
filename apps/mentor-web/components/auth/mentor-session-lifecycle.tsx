@@ -10,7 +10,9 @@ import {
   type SessionStatus,
 } from "@/lib/auth/session-client";
 import {
+  calculateServerClockOffset,
   canExtendSession,
+  getServerAdjustedNow,
   getRemainingSeconds,
   getSessionPhase,
   type SessionDeadlines,
@@ -53,6 +55,7 @@ export function MentorSessionLifecycle({
   const pathname = usePathname();
   const [status, setStatus] = React.useState<SessionStatus | null>(null);
   const [now, setNow] = React.useState(() => Date.now());
+  const [clockOffsetMs, setClockOffsetMs] = React.useState(0);
   const [expired, setExpired] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const lastActivitySentAt = React.useRef(0);
@@ -62,7 +65,16 @@ export function MentorSessionLifecycle({
 
   const syncStatus = React.useCallback(async () => {
     try {
+      const requestStartedAt = Date.now();
       const next = await mentorSessionClient.getStatus();
+      const responseReceivedAt = Date.now();
+      const offset = calculateServerClockOffset(
+        next.server_time,
+        requestStartedAt,
+        responseReceivedAt
+      );
+      setClockOffsetMs(offset);
+      setNow(getServerAdjustedNow(offset, responseReceivedAt));
       setStatus(next);
       if (!next.authenticated) setExpired(true);
     } catch (error) {
@@ -81,11 +93,20 @@ export function MentorSessionLifecycle({
 
       const work = (async () => {
         try {
+          const requestStartedAt = Date.now();
           const activity = await mentorSessionClient.recordActivity();
+          const responseReceivedAt = Date.now();
           if (!activity) {
             setExpired(true);
             return;
           }
+          const offset = calculateServerClockOffset(
+            activity.server_time,
+            requestStartedAt,
+            responseReceivedAt
+          );
+          setClockOffsetMs(offset);
+          setNow(getServerAdjustedNow(offset, responseReceivedAt));
           lastActivitySentAt.current = Date.now();
           setExpired(false);
           const next = mergeActivity(status, activity);
@@ -129,9 +150,12 @@ export function MentorSessionLifecycle({
 
   React.useEffect(() => {
     if (!active) return;
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    const timer = window.setInterval(
+      () => setNow(getServerAdjustedNow(clockOffsetMs)),
+      1_000
+    );
     return () => window.clearInterval(timer);
-  }, [active]);
+  }, [active, clockOffsetMs]);
 
   React.useEffect(() => {
     if (!active) return;
@@ -154,7 +178,7 @@ export function MentorSessionLifecycle({
     if (!active) return;
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        setNow(Date.now());
+        setNow(getServerAdjustedNow(clockOffsetMs));
         void syncStatus();
       }
     };
@@ -166,7 +190,7 @@ export function MentorSessionLifecycle({
       window.removeEventListener("pageshow", handleVisibility);
       window.removeEventListener("focus", handleVisibility);
     };
-  }, [active, syncStatus]);
+  }, [active, clockOffsetMs, syncStatus]);
 
   const currentStatus = active ? status : null;
   const currentExpired = active ? expired : false;

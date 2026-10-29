@@ -55,7 +55,7 @@ export class AdminSessionClient {
   private refreshPromise: Promise<boolean> | null = null;
 
   constructor(options: SessionClientOptions = {}) {
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? ((...args) => fetch(...args));
     this.baseUrl = options.baseUrl ?? getApiBaseUrl;
     this.now = options.now ?? Date.now;
     this.sleep = options.sleep ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));

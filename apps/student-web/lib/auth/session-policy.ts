@@ -8,6 +8,21 @@ export interface SessionDeadlines {
 
 export type SessionPhase = "active" | "warning" | "expired";
 
+export function calculateServerClockOffset(
+  serverTime: string,
+  requestStartedAt: number,
+  responseReceivedAt: number
+): number {
+  const parsedServerTime = Date.parse(serverTime);
+  if (Number.isNaN(parsedServerTime)) return 0;
+  const midpoint = requestStartedAt + Math.max(0, responseReceivedAt - requestStartedAt) / 2;
+  return parsedServerTime - midpoint;
+}
+
+export function getServerAdjustedNow(clockOffsetMs: number, browserNow = Date.now()): number {
+  return browserNow + (Number.isFinite(clockOffsetMs) ? clockOffsetMs : 0);
+}
+
 function parseDateSafe(dateStr: string | null | undefined): number {
   if (!dateStr) return Number.POSITIVE_INFINITY;
   const parsed = Date.parse(dateStr);
