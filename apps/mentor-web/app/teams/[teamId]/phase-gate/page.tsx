@@ -31,6 +31,13 @@ import type {
 import { PortalShell } from "@/components/layout/portal-shell";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/lib/auth-context";
+import {
+  mentorDraftKey,
+  saveExpiringDraft,
+  loadExpiringDraft,
+  removeDraft,
+} from "@/lib/auth/drafts";
 
 // Canonical DLIF Fellow Handbook – DISCOVER v1.0 FINAL (Page 9) rubric
 const HANDBOOK_RUBRIC: (RubricDimension & { dimension_key: string; dimension_title: string })[] = [
@@ -101,6 +108,7 @@ export default function PhaseGatePage() {
   const params = useParams<{ teamId: string }>();
   const teamId = params?.teamId ?? "";
   const router = useRouter();
+  const { user } = useAuth();
 
   const [team, setTeam] = React.useState<MentorTeamSummary | null>(null);
   const [assessment, setAssessment] = React.useState<PhaseGateAssessment | null>(null);
@@ -114,6 +122,20 @@ export default function PhaseGatePage() {
   const [decisions, setDecisions] = React.useState<
     Record<string, { is_cleared: boolean | null; mentor_comment: string }>
   >(initialDecisions);
+
+  // sessionStorage draft key for this phase-gate team
+  const phaseDraftKey = React.useMemo(
+    () => (teamId ? mentorDraftKey(user?.id, "phase-gate", teamId) : null),
+    [user?.id, teamId],
+  );
+
+  // Save draft to sessionStorage whenever mentorNotes or decisions change (after initial load)
+  const draftLoaded = React.useRef(false);
+  React.useEffect(() => {
+    if (!draftLoaded.current) return; // don't overwrite while still loading from server
+    if (!phaseDraftKey || typeof window === "undefined") return;
+    saveExpiringDraft(window.sessionStorage, phaseDraftKey, { mentorNotes, decisions });
+  }, [mentorNotes, decisions, phaseDraftKey]);
 
   React.useEffect(() => {
     if (!teamId) return;
@@ -160,15 +182,32 @@ export default function PhaseGatePage() {
           }
           setDecisions(init);
         } else {
-          // If no draft exists yet or request returned 404, gracefully initialize with handbook rubric
-          setDecisions({ ...initialDecisions });
+          // If no draft exists yet or request returned 404 — restore from sessionStorage draft
+          const draftKey = phaseDraftKey;
+          if (draftKey && typeof window !== "undefined") {
+            const saved = loadExpiringDraft<{
+              mentorNotes: string;
+              decisions: Record<string, { is_cleared: boolean | null; mentor_comment: string }>;
+            }>(window.sessionStorage, draftKey);
+            if (saved) {
+              setMentorNotes(saved.mentorNotes ?? "");
+              setDecisions({ ...initialDecisions, ...saved.decisions });
+            } else {
+              setDecisions({ ...initialDecisions });
+            }
+          } else {
+            setDecisions({ ...initialDecisions });
+          }
         }
       })
       .catch((e) => {
         console.warn("Could not load initial assessment:", e);
       })
-      .finally(() => setLoading(false));
-  }, [teamId]);
+      .finally(() => {
+        setLoading(false);
+        draftLoaded.current = true;
+      });
+  }, [teamId, phaseDraftKey]);
 
   const buildPayload = () => ({
     dimensions: Object.entries(decisions)
@@ -189,6 +228,10 @@ export default function PhaseGatePage() {
       const updated = await saveMentorPhaseGateDraft(teamId, buildPayload());
       setAssessment(updated);
       setSuccessMsg("Draft assessment saved successfully.");
+      // Clear sessionStorage draft — content is now persisted on the server
+      if (phaseDraftKey && typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, phaseDraftKey);
+      }
     } catch (e: unknown) {
       setError((e as Error).message ?? "Failed to save draft.");
     } finally {
@@ -213,6 +256,10 @@ export default function PhaseGatePage() {
       setSuccessMsg(
         "Assessment successfully submitted! The Admin team will review your evaluation and make the final progression decision to unlock VALIDATE."
       );
+      // Clear sessionStorage draft — assessment is now locked
+      if (phaseDraftKey && typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, phaseDraftKey);
+      }
     } catch (e: unknown) {
       setError((e as Error).message ?? "Failed to submit assessment.");
     } finally {

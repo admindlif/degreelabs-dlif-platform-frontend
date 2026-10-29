@@ -1,4 +1,8 @@
-import { getApiBaseUrl } from "@/lib/api/config";
+import { getApiBaseUrl } from "./config.ts";
+import {
+  mentorSessionClient,
+  SessionNetworkError,
+} from "../auth/session-client.ts";
 
 export class ApiError extends Error {
   status: number;
@@ -17,7 +21,7 @@ export async function apiClient<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const headers = new Headers(options.headers);
-  if (!headers.has("Content-Type")) {
+  if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
@@ -26,25 +30,51 @@ export async function apiClient<T>(
   const path = normalizedEndpoint.startsWith("/api/v1") ? normalizedEndpoint : `/api/v1${normalizedEndpoint}`;
   const url = `${base}${path}`;
 
-  const res = await fetch(url, {
-    cache: "no-store",
-    ...options,
-    credentials: "include",
-    headers,
-  });
+  const method = (options.method ?? "GET").toUpperCase();
+  const canRetry = ["GET", "HEAD", "OPTIONS"].includes(method);
+  const execute = () =>
+    fetch(url, {
+      cache: "no-store",
+      ...options,
+      credentials: "include",
+      headers,
+    });
+
+  let res = await execute();
+
+  if (res.status === 401) {
+    let renewed = false;
+    try {
+      renewed = await mentorSessionClient.renewAccess();
+    } catch (error) {
+      if (error instanceof SessionNetworkError) {
+        throw new ApiError(
+          "The authentication service is temporarily unavailable. Your work has not been discarded.",
+          0
+        );
+      }
+      throw error;
+    }
+
+    if (renewed && canRetry) {
+      res = await execute();
+    } else if (renewed) {
+      throw new ApiError(
+        "Your session was renewed. Please submit this action again.",
+        401
+      );
+    }
+  }
 
   if (!res.ok) {
     let errorData: unknown = null;
     try {
       errorData = await res.json();
     } catch {
-      // ignore
+      // ignore non-JSON body
     }
 
     if (res.status === 401) {
-      if (typeof window !== "undefined" && !window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login?session_expired=1";
-      }
       throw new ApiError(
         "Your session has expired. Please sign in again.",
         res.status,
@@ -56,15 +86,24 @@ export async function apiClient<T>(
       typeof errorData === "object" &&
       errorData !== null &&
       "detail" in errorData &&
-      typeof (errorData as Record<string, unknown>).detail === "string"
-        ? (errorData as Record<string, string>).detail
+      typeof (errorData as { detail: unknown }).detail === "string"
+        ? (errorData as { detail: string }).detail
         : null;
+
+    if (res.status === 403) {
+      throw new ApiError(
+        detail || "You do not have permission to perform this action.",
+        res.status,
+        errorData
+      );
+    }
+
     const message = detail || `API Request failed with status ${res.status}`;
     throw new ApiError(message, res.status, errorData);
   }
 
   if (res.status === 204) {
-    return undefined as T;
+    return undefined as unknown as T;
   }
 
   return res.json();

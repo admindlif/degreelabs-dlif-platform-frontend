@@ -36,6 +36,13 @@ import type {
   MentorChecklistItem,
 } from "@/lib/api/types";
 import { MentorChecklistItemModal } from "@/components/checklist/mentor-checklist-item-modal";
+import { useAuth } from "@/lib/auth-context";
+import {
+  mentorDraftKey,
+  saveExpiringDraft,
+  loadExpiringDraft,
+  removeDraft,
+} from "@/lib/auth/drafts";
 
 type FilterStatus = "all" | "pending_review" | "accepted" | "rejected" | "not_checked";
 
@@ -69,10 +76,55 @@ interface ReviewModalProps {
 }
 
 function ReviewModal({ item, onClose, onSuccess }: ReviewModalProps) {
-  const [decision, setDecision] = React.useState<"accepted" | "rejected" | null>(null);
-  const [reason, setReason] = React.useState("");
+  const { user } = useAuth();
+  const draftKey = React.useMemo(
+    () =>
+      mentorDraftKey(
+        user?.id,
+        "review-decision",
+        item.team_id,
+        item.checklist_item_id,
+        item.fellow_id
+      ),
+    [user?.id, item.team_id, item.checklist_item_id, item.fellow_id]
+  );
+
+  const [initialDraft] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      return loadExpiringDraft<{ decision: "accepted" | "rejected"; reason: string }>(
+        window.sessionStorage,
+        draftKey
+      );
+    }
+    return null;
+  });
+
+  const [decision, setDecision] = React.useState<"accepted" | "rejected" | null>(
+    initialDraft?.decision ?? null
+  );
+  const [reason, setReason] = React.useState<string>(initialDraft?.reason ?? "");
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  const handleDecisionChange = (nextDecision: "accepted" | "rejected") => {
+    setDecision(nextDecision);
+    if (typeof window !== "undefined") {
+      saveExpiringDraft(window.sessionStorage, draftKey, {
+        decision: nextDecision,
+        reason,
+      });
+    }
+  };
+
+  const handleReasonChange = (nextReason: string) => {
+    setReason(nextReason);
+    if (typeof window !== "undefined" && decision) {
+      saveExpiringDraft(window.sessionStorage, draftKey, {
+        decision,
+        reason: nextReason,
+      });
+    }
+  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -91,6 +143,9 @@ function ReviewModal({ item, onClose, onSuccess }: ReviewModalProps) {
         action: decision === "accepted" ? "accept" : "reject",
         rejection_reason: decision === "rejected" ? reason.trim() : undefined,
       });
+      if (typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, draftKey);
+      }
       onSuccess({
         ...item,
         review_status: decision,
@@ -189,7 +244,7 @@ function ReviewModal({ item, onClose, onSuccess }: ReviewModalProps) {
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
-                onClick={() => setDecision("accepted")}
+                onClick={() => handleDecisionChange("accepted")}
                 className={`flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-bold transition-all ${
                   decision === "accepted"
                     ? "border-emerald-500 bg-emerald-50 text-emerald-700"
@@ -201,7 +256,7 @@ function ReviewModal({ item, onClose, onSuccess }: ReviewModalProps) {
               </button>
               <button
                 type="button"
-                onClick={() => setDecision("rejected")}
+                onClick={() => handleDecisionChange("rejected")}
                 className={`flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-bold transition-all ${
                   decision === "rejected"
                     ? "border-red-500 bg-red-50 text-red-700"
@@ -230,7 +285,7 @@ function ReviewModal({ item, onClose, onSuccess }: ReviewModalProps) {
                 id="rejection-reason"
                 rows={4}
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => handleReasonChange(e.target.value)}
                 placeholder="Explain what is missing or needs to be improved..."
                 disabled={saving}
                 className="w-full resize-y rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-xs leading-relaxed text-[var(--color-text-primary)] focus:border-[var(--color-brand-orange)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-orange)] disabled:opacity-60"
