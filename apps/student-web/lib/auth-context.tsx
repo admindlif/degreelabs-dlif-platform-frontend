@@ -24,7 +24,7 @@ interface AuthContextValue {
   user: AuthUser | null;
   loading: boolean;
   error: string | null;
-  logout: () => Promise<void>;
+  logout: () => Promise<{ serverRevoked: boolean }>;
   refreshUser: (triggerLoader?: boolean) => Promise<boolean>;
 }
 
@@ -128,17 +128,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [pathname, user, refreshUser, publicPaths, router]);
 
-  const clearLocalSession = React.useCallback(() => {
+  const clearLocalSession = React.useCallback((currentUserId?: string | null) => {
     setUser(null);
     setError(null);
     setVerifiedUnauthenticated(true);
     if (typeof window !== "undefined") {
-      clearFellowDrafts(window.sessionStorage);
+      clearFellowDrafts(window.sessionStorage, currentUserId);
     }
   }, []);
 
-  const logout = React.useCallback(async (): Promise<void> => {
+  const logout = React.useCallback(async (): Promise<{ serverRevoked: boolean }> => {
     setError(null);
+    let serverRevoked = false;
+    let failureDetail: string | null = null;
+    const currentUserId = user?.id;
 
     try {
       const res = await fetch(`${getApiBaseUrl()}/api/v1/auth/logout`, {
@@ -147,27 +150,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         cache: "no-store",
       });
 
-      if (!res.ok && res.status !== 401) {
+      if (res.ok || res.status === 401) {
+        serverRevoked = true;
+      } else {
         const data: unknown = await res.json().catch(() => null);
-        const message =
-          responseDetail(data) ?? "Unable to log out right now. Please try again.";
-        setError(message);
+        failureDetail = responseDetail(data) ?? "Server failed to revoke session.";
       }
     } catch (caught) {
-      if (caught instanceof Error) {
-        setError(caught.message);
-      }
-    } finally {
-      clearLocalSession();
-      fellowSessionClient.announce({ type: "logout" });
-      router.replace("/login");
+      failureDetail =
+        caught instanceof Error
+          ? caught.message
+          : "Network error reaching logout service.";
     }
-  }, [clearLocalSession, router]);
+
+    clearLocalSession(currentUserId);
+    fellowSessionClient.announce({ type: "logout" });
+
+    if (!serverRevoked) {
+      const warningMessage = `Logged out locally. Warning: Server-side revocation could not be confirmed (${failureDetail}).`;
+      setError(warningMessage);
+    }
+
+    router.replace("/login");
+    return { serverRevoked };
+  }, [clearLocalSession, router, user?.id]);
 
   const handleRemoteLogout = React.useCallback(() => {
-    clearLocalSession();
+    clearLocalSession(user?.id);
     router.replace("/login");
-  }, [clearLocalSession, router]);
+  }, [clearLocalSession, router, user?.id]);
 
   React.useEffect(() => {
     if (loading) return;

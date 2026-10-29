@@ -5,6 +5,7 @@ import { X, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChecklistItem } from "@/lib/api/types";
 import { submitChecklistResponse } from "@/lib/api/checklist";
+import { useAuth } from "@/lib/auth-context";
 import {
   fellowDraftKey,
   loadExpiringDraft,
@@ -26,7 +27,7 @@ interface ChecklistDraft {
   myThoughts: string;
 }
 
-function getInitialValues(item: ChecklistItem) {
+function getInitialValues(item: ChecklistItem, userId?: string | null) {
   let contribution = item.contribution || "";
   let reflection = item.reflection || "";
   let myThoughts = item.my_thoughts || "";
@@ -34,7 +35,7 @@ function getInitialValues(item: ChecklistItem) {
   if (typeof window !== "undefined") {
     const draft = loadExpiringDraft<ChecklistDraft>(
       window.sessionStorage,
-      fellowDraftKey("checklist", item.id)
+      fellowDraftKey(userId, "checklist", item.id)
     );
     if (draft) {
       if (draft.contribution) contribution = draft.contribution;
@@ -48,16 +49,18 @@ function getInitialValues(item: ChecklistItem) {
 
 function ChecklistResponseDialog({
   item,
+  userId,
   onClose,
   onSuccess,
   onOpenFeedback,
 }: {
   item: ChecklistItem;
+  userId?: string | null;
   onClose: () => void;
   onSuccess: (updatedItem: ChecklistItem) => void;
   onOpenFeedback?: (item: ChecklistItem) => void;
 }) {
-  const [initial] = React.useState(() => getInitialValues(item));
+  const [initial] = React.useState(() => getInitialValues(item, userId));
   const [contribution, setContribution] = React.useState(initial.contribution);
   const [reflection, setReflection] = React.useState(initial.reflection);
   const [myThoughts, setMyThoughts] = React.useState(initial.myThoughts);
@@ -69,7 +72,7 @@ function ChecklistResponseDialog({
       if (typeof window === "undefined") return;
       saveExpiringDraft(
         window.sessionStorage,
-        fellowDraftKey("checklist", item.id),
+        fellowDraftKey(userId, "checklist", item.id),
         {
           contribution: nextContrib,
           reflection: nextReflect,
@@ -77,7 +80,7 @@ function ChecklistResponseDialog({
         }
       );
     },
-    [item.id]
+    [item.id, userId]
   );
 
   async function handleSave(e: React.FormEvent) {
@@ -104,7 +107,7 @@ function ChecklistResponseDialog({
         myThoughts.trim()
       );
       if (typeof window !== "undefined") {
-        removeDraft(window.sessionStorage, fellowDraftKey("checklist", item.id));
+        removeDraft(window.sessionStorage, fellowDraftKey(userId, "checklist", item.id));
       }
       onSuccess(updated);
       onClose();
@@ -324,12 +327,14 @@ export function ChecklistResponseModal({
   onSuccess,
   onOpenFeedback,
 }: ChecklistResponseModalProps) {
+  const { user } = useAuth();
   if (!isOpen || !item) return null;
 
   return (
     <ChecklistResponseDialog
       key={item.id}
       item={item}
+      userId={user?.id}
       onClose={onClose}
       onSuccess={onSuccess}
       onOpenFeedback={onOpenFeedback}

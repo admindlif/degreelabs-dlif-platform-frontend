@@ -13,9 +13,7 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
-  User,
   ShieldCheck,
-  ChevronRight,
 } from "lucide-react";
 import { PortalShell } from "@/components/layout/portal-shell";
 import { Button } from "@/components/ui/button";
@@ -26,7 +24,6 @@ import {
 } from "@/lib/api/checklist";
 import type {
   ChecklistFeedbackMessage,
-  ChecklistItem,
   FellowChecklistResponse,
 } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth-context";
@@ -69,12 +66,14 @@ export default function ChecklistFeedbackPage() {
   }, [selectedItemId]);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadChecklist();
   }, [loadChecklist]);
 
   // Sync with URL param
   React.useEffect(() => {
     if (itemIdParam && itemIdParam !== selectedItemId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedItemId(itemIdParam);
     }
   }, [itemIdParam, selectedItemId]);
@@ -101,12 +100,12 @@ export default function ChecklistFeedbackPage() {
       if (typeof window !== "undefined") {
         const draft = loadExpiringDraft<string>(
           window.sessionStorage,
-          fellowDraftKey("checklist-chat", selectedItemId)
+          fellowDraftKey(user?.id, "checklist-chat", selectedItemId)
         );
         setNewMessage(draft ?? "");
       }
     }
-  }, [selectedItemId, loadThread]);
+  }, [selectedItemId, loadThread, user?.id]);
 
   // Scroll to bottom when messages change
   React.useEffect(() => {
@@ -127,7 +126,7 @@ export default function ChecklistFeedbackPage() {
       setMessages((prev) => [...prev, posted]);
       setNewMessage("");
       if (typeof window !== "undefined") {
-        removeDraft(window.sessionStorage, fellowDraftKey("checklist-chat", selectedItemId));
+        removeDraft(window.sessionStorage, fellowDraftKey(user?.id, "checklist-chat", selectedItemId));
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to post message.");
@@ -437,7 +436,7 @@ export default function ChecklistFeedbackPage() {
                   if (selectedItemId && typeof window !== "undefined") {
                     saveExpiringDraft(
                       window.sessionStorage,
-                      fellowDraftKey("checklist-chat", selectedItemId),
+                      fellowDraftKey(user?.id, "checklist-chat", selectedItemId),
                       val
                     );
                   }

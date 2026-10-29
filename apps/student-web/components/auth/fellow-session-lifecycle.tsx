@@ -20,7 +20,7 @@ const ACTIVITY_THROTTLE_MS = 5 * 60 * 1000;
 
 interface FellowSessionLifecycleProps {
   active: boolean;
-  onLogout: () => Promise<void>;
+  onLogout: () => Promise<unknown>;
   onRemoteLogout: () => void;
 }
 

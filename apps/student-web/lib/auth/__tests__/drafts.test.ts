@@ -38,8 +38,8 @@ class MemoryStorage implements DraftStorage {
 
 test("fellowDraftKey formats prefixed and encoded keys", () => {
   assert.equal(FELLOW_DRAFT_TTL_MS, 24 * 60 * 60 * 1000);
-  const key = fellowDraftKey("checklist", "item-123/special");
-  assert.equal(key, `${FELLOW_DRAFT_PREFIX}checklist:item-123%2Fspecial`);
+  const key = fellowDraftKey("fellow-123", "checklist", "item-123/special");
+  assert.equal(key, `${FELLOW_DRAFT_PREFIX}fellow-123:checklist:item-123%2Fspecial`);
 });
 
 test("saveExpiringDraft stores draft with timestamp envelope", () => {
@@ -93,14 +93,35 @@ test("removeDraft deletes target draft", () => {
 
 test("clearFellowDrafts purges only DLIF fellow drafts", () => {
   const storage = new MemoryStorage();
-  storage.setItem(fellowDraftKey("checklist", "1"), "draft1");
-  storage.setItem(fellowDraftKey("session", "2"), "draft2");
+  storage.setItem(fellowDraftKey("fellow-123", "checklist", "1"), "draft1");
+  storage.setItem(fellowDraftKey("fellow-123", "session", "2"), "draft2");
   storage.setItem("unrelated_app_setting", "preserve_me");
 
   clearFellowDrafts(storage);
 
-  assert.equal(storage.getItem(fellowDraftKey("checklist", "1")), null);
-  assert.equal(storage.getItem(fellowDraftKey("session", "2")), null);
+  assert.equal(storage.getItem(fellowDraftKey("fellow-123", "checklist", "1")), null);
+  assert.equal(storage.getItem(fellowDraftKey("fellow-123", "session", "2")), null);
   assert.equal(storage.getItem("unrelated_app_setting"), "preserve_me");
+});
+
+test("user-scoped draft keys isolate drafts between distinct users", () => {
+  const userA = "user-aaa-111";
+  const userB = "user-bbb-222";
+  const keyA = fellowDraftKey(userA, "checklist", "item-99");
+  const keyB = fellowDraftKey(userB, "checklist", "item-99");
+
+  assert.notEqual(keyA, keyB);
+  assert.ok(keyA.includes(encodeURIComponent(userA)));
+  assert.ok(keyB.includes(encodeURIComponent(userB)));
+
+  const storage = new MemoryStorage();
+  storage.setItem(keyA, JSON.stringify({ value: { notes: "user A draft" }, expiresAt: Date.now() + 60000 }));
+  storage.setItem(keyB, JSON.stringify({ value: { notes: "user B draft" }, expiresAt: Date.now() + 60000 }));
+
+  // Clear only user A's drafts
+  clearFellowDrafts(storage, userA);
+
+  assert.equal(storage.getItem(keyA), null);
+  assert.notEqual(storage.getItem(keyB), null);
 });
 
