@@ -35,6 +35,12 @@ export interface RecordingPlayerProps {
   isSeekable?: boolean;
 }
 
+type IOSVideoElement = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitDisplayingFullscreen?: boolean;
+};
+
 export function RecordingPlayer({
   playbackUrl,
   status,
@@ -67,12 +73,31 @@ export function RecordingPlayer({
   const [seekNotice, setSeekNotice] = React.useState<string | null>(null);
   const [isScrubbing, setIsScrubbing] = React.useState(false);
   const [scrubValue, setScrubValue] = React.useState(0);
+  const [isIOSDevice, setIsIOSDevice] = React.useState(false);
+  const [isIPhone, setIsIPhone] = React.useState(false);
 
   const controlsTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const seekNoticeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
   const isRefreshingRef = React.useRef(false);
   const autoRefreshInitiatedRef = React.useRef(false);
   const errorRefreshCountRef = React.useRef(0);
+
+  React.useEffect(() => {
+    const animationFrame = window.requestAnimationFrame(() => {
+      const userAgent = navigator.userAgent;
+      const iPadDesktopMode =
+        navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+
+      setIsIOSDevice(
+        /iPhone|iPad|iPod/i.test(userAgent) || iPadDesktopMode
+      );
+      setIsIPhone(/iPhone|iPod/i.test(userAgent));
+    });
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, []);
 
   // Authoritative total duration: backend durationSeconds is primary because
   // the tl;dv fMP4 stream does not contain mehd header and reports 0 or chunk duration in Chrome.
@@ -373,6 +398,23 @@ export function RecordingPlayer({
     }
   };
 
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const synchronizeVolume = () => {
+      setIsMuted(video.muted);
+      setVolume(video.volume);
+    };
+
+    synchronizeVolume();
+    video.addEventListener("volumechange", synchronizeVolume);
+
+    return () => {
+      video.removeEventListener("volumechange", synchronizeVolume);
+    };
+  }, [playbackUrl]);
+
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVol = parseFloat(e.target.value);
     setVolume(newVol);
@@ -384,14 +426,11 @@ export function RecordingPlayer({
   };
 
   const toggleMute = () => {
-    if (!videoRef.current) return;
-    const nextMuted = !isMuted;
-    videoRef.current.muted = nextMuted;
-    setIsMuted(nextMuted);
-    if (!nextMuted && volume === 0) {
-      setVolume(0.5);
-      videoRef.current.volume = 0.5;
-    }
+    const video = videoRef.current;
+    if (!video) return;
+
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
   };
 
   const changePlaybackRate = (rate: number) => {
@@ -401,16 +440,37 @@ export function RecordingPlayer({
     }
   };
 
-  const toggleFullscreen = () => {
-    if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-      }).catch(() => { });
-    } else {
-      document.exitFullscreen().then(() => {
-        setIsFullscreen(false);
-      }).catch(() => { });
+  const toggleFullscreen = async () => {
+    const video = videoRef.current as IOSVideoElement | null;
+    const container = containerRef.current;
+
+    if (!video || !container) return;
+
+    if (isIPhone && typeof video.webkitEnterFullscreen === "function") {
+      try {
+        if (
+          video.webkitDisplayingFullscreen &&
+          typeof video.webkitExitFullscreen === "function"
+        ) {
+          video.webkitExitFullscreen();
+        } else {
+          video.webkitEnterFullscreen();
+        }
+      } catch {
+        setPlaybackError("Fullscreen is unavailable on this device.");
+      }
+
+      return;
+    }
+
+    try {
+      if (!document.fullscreenElement) {
+        await container.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      setPlaybackError("Fullscreen is unavailable on this device.");
     }
   };
 
@@ -420,6 +480,34 @@ export function RecordingPlayer({
     };
     document.addEventListener("fullscreenchange", handleFsChange);
     return () => document.removeEventListener("fullscreenchange", handleFsChange);
+  }, []);
+
+  React.useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const handleIOSFullscreenStart = () => setIsFullscreen(true);
+    const handleIOSFullscreenEnd = () => setIsFullscreen(false);
+
+    video.addEventListener(
+      "webkitbeginfullscreen",
+      handleIOSFullscreenStart
+    );
+    video.addEventListener(
+      "webkitendfullscreen",
+      handleIOSFullscreenEnd
+    );
+
+    return () => {
+      video.removeEventListener(
+        "webkitbeginfullscreen",
+        handleIOSFullscreenStart
+      );
+      video.removeEventListener(
+        "webkitendfullscreen",
+        handleIOSFullscreenEnd
+      );
+    };
   }, []);
 
   const handleVideoError = async () => {
@@ -773,18 +861,24 @@ export function RecordingPlayer({
                   <Volume2 className="h-4 w-4" />
                 )}
               </button>
-              <input
-                type="range"
-                min={0}
-                max={1}
-                step={0.05}
-                value={isMuted ? 0 : volume}
-                onChange={handleVolumeChange}
-                aria-label="Volume slider"
-                className="w-14 sm:w-16 h-1 cursor-pointer appearance-none rounded-lg bg-neutral-600 accent-white"
-              />
-            </div>
 
+              {!isIOSDevice ? (
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={isMuted ? 0 : volume}
+                  onChange={handleVolumeChange}
+                  aria-label="Volume slider"
+                  className="w-14 sm:w-16 h-1 cursor-pointer appearance-none rounded-lg bg-neutral-600 accent-white"
+                />
+              ) : (
+                <span className="text-[10px] text-neutral-300">
+                  Device volume
+                </span>
+              )}
+            </div>
             {/* Speed Selector */}
             <div className="relative">
               <select
