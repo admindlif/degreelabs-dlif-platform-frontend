@@ -11,9 +11,13 @@ import {
   Copy,
   Check,
   ArrowRight,
+  ArrowLeft,
   AlertCircle,
   Loader2,
   QrCode,
+  Mail,
+  RefreshCw,
+  Smartphone,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { getApiBaseUrl } from "@/lib/api/config";
@@ -43,13 +47,25 @@ function recoveryCodesFrom(data: unknown): string[] | null {
   return null;
 }
 
-function StepIndicator({ currentStep }: { currentStep: 1 | 2 | 3 | 4 }) {
-  const steps = [
-    { num: 1, label: "Set Password" },
-    { num: 2, label: "Configure 2FA" },
-    { num: 3, label: "Confirm Code" },
-    { num: 4, label: "Save Recovery Codes" },
-  ];
+function StepIndicator({
+  currentStep,
+  method,
+}: {
+  currentStep: 1 | 2 | 3 | 4;
+  method: "email_otp" | "authenticator";
+}) {
+  const steps =
+    method === "email_otp"
+      ? [
+          { num: 1, label: "Set Password" },
+          { num: 2, label: "Verify Email" },
+        ]
+      : [
+          { num: 1, label: "Set Password" },
+          { num: 2, label: "Configure 2FA" },
+          { num: 3, label: "Confirm Code" },
+          { num: 4, label: "Recovery Codes" },
+        ];
 
   return (
     <div className="flex items-center justify-between mb-8 px-2">
@@ -60,30 +76,33 @@ function StepIndicator({ currentStep }: { currentStep: 1 | 2 | 3 | 4 }) {
           <React.Fragment key={s.num}>
             <div className="flex flex-col items-center gap-1.5">
               <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${isDone
-                  ? "bg-[var(--color-success)] text-white"
-                  : isCurrent
-                    ? "bg-[var(--color-brand-orange)] text-white shadow-md ring-4 ring-orange-500/20"
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                  isDone
+                    ? "bg-[var(--color-success,#16a34a)] text-white"
+                    : isCurrent
+                    ? "bg-[var(--color-brand-orange,#ea580c)] text-white shadow-md ring-4 ring-orange-500/20"
                     : "bg-[var(--color-bg-subtle)] text-[var(--color-text-muted)] border border-[var(--color-border-default)]"
-                  }`}
+                }`}
               >
                 {isDone ? <Check className="w-4 h-4" /> : s.num}
               </div>
               <span
-                className={`text-[10px] font-semibold tracking-wider uppercase hidden sm:block ${isCurrent
-                  ? "text-[var(--color-text-primary)]"
-                  : "text-[var(--color-text-muted)]"
-                  }`}
+                className={`text-[10px] font-semibold tracking-wider uppercase hidden sm:block ${
+                  isCurrent
+                    ? "text-[var(--color-text-primary)]"
+                    : "text-[var(--color-text-muted)]"
+                }`}
               >
                 {s.label}
               </span>
             </div>
             {idx < steps.length - 1 && (
               <div
-                className={`flex-1 h-0.5 mx-2 transition-all ${currentStep > idx + 1
-                  ? "bg-[var(--color-success)]"
-                  : "bg-[var(--color-border-default)]"
-                  }`}
+                className={`flex-1 h-0.5 mx-2 transition-all ${
+                  currentStep > idx + 1
+                    ? "bg-[var(--color-success,#16a34a)]"
+                    : "bg-[var(--color-border-default)]"
+                }`}
               />
             )}
           </React.Fragment>
@@ -99,7 +118,7 @@ function StudentActivationContent() {
   const { refreshUser } = useAuth();
   const isResume = searchParams.get("resume") === "1";
 
-  // Step state
+  // Step state: 1 = Password, 2 = Verify (Email OTP or Authenticator QR), 3 = Authenticator Confirm, 4 = Recovery Codes
   const [step, setStep] = React.useState<1 | 2 | 3 | 4>(isResume ? 2 : 1);
   const [invitationToken] = React.useState(
     () => searchParams.get("token")?.trim() ?? ""
@@ -107,11 +126,18 @@ function StudentActivationContent() {
   const [password, setPassword] = React.useState("");
   const [confirmPassword, setConfirmPassword] = React.useState("");
 
-  // Intermediate auth state
+  // Verification method selection: default to email_otp for Fellow convenience
+  const [method, setMethod] = React.useState<"email_otp" | "authenticator">("email_otp");
+
+  // Email OTP state
+  const [maskedEmail, setMaskedEmail] = React.useState<string | null>(null);
+  const [otpCode, setOtpCode] = React.useState("");
+  const [cooldown, setCooldown] = React.useState(0);
+  const [otpSending, setOtpSending] = React.useState(false);
+
+  // Authenticator state
   const [qrCodeUrl, setQrCodeUrl] = React.useState("");
   const [totpCode, setTotpCode] = React.useState("");
-
-  // Step 4 state
   const [recoveryCodes, setRecoveryCodes] = React.useState<string[]>([]);
   const [copiedCodes, setCopiedCodes] = React.useState(false);
   const [confirmedSaved, setConfirmedSaved] = React.useState(false);
@@ -121,6 +147,15 @@ function StudentActivationContent() {
   const [error, setError] = React.useState<string | null>(null);
   const resumeAttempted = React.useRef(false);
   const qrCodeUrlRef = React.useRef<string | null>(null);
+
+  // Cooldown countdown timer
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const interval = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldown]);
 
   const replaceQrCodeUrl = React.useCallback((nextUrl: string) => {
     if (qrCodeUrlRef.current) {
@@ -150,6 +185,44 @@ function StudentActivationContent() {
       query ? `/activate?${query}` : "/activate"
     );
   }, [searchParams]);
+
+  const sendEmailOtp = React.useCallback(async () => {
+    setOtpSending(true);
+    setError(null);
+    try {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/v1/auth/email-otp/send`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "activation" }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(responseDetail(data) ?? "Failed to send verification code. Please try again.");
+        return false;
+      }
+
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "masked_email" in data &&
+        typeof data.masked_email === "string"
+      ) {
+        setMaskedEmail(data.masked_email);
+      }
+      setCooldown(60);
+      return true;
+    } catch {
+      setError("Unable to connect to the authentication service. Please check your connection.");
+      return false;
+    } finally {
+      setOtpSending(false);
+    }
+  }, []);
 
   const beginTwoFactorSetup = React.useCallback(async () => {
     const setupRes = await fetch(
@@ -186,13 +259,15 @@ function StudentActivationContent() {
     setStep(2);
   }, [replaceQrCodeUrl]);
 
+  // Handle resume flow
   React.useEffect(() => {
     if (!isResume || resumeAttempted.current) return;
     resumeAttempted.current = true;
 
     async function resumeOnboarding() {
       try {
-        await beginTwoFactorSetup();
+        setMethod("email_otp");
+        await sendEmailOtp();
       } catch {
         setError(
           "Your onboarding session has expired. Sign in again to continue setup."
@@ -203,7 +278,7 @@ function StudentActivationContent() {
     }
 
     void resumeOnboarding();
-  }, [beginTwoFactorSetup, isResume]);
+  }, [isResume, sendEmailOtp]);
 
   // Step 1: Submit invitation token + password
   const handleStep1Submit = async (e: React.FormEvent) => {
@@ -254,7 +329,9 @@ function StudentActivationContent() {
         return;
       }
 
-      await beginTwoFactorSetup();
+      setStep(2);
+      setMethod("email_otp");
+      await sendEmailOtp();
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -266,7 +343,51 @@ function StudentActivationContent() {
     }
   };
 
-  // Step 3: Confirm 2FA code & get recovery codes
+  // Step 2 (Email OTP): Verify 6-digit OTP code & activate account
+  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    try {
+      const apiBaseUrl = getApiBaseUrl();
+      const res = await fetch(`${apiBaseUrl}/api/v1/auth/email-otp/verify`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: otpCode.trim(),
+          purpose: "activation",
+        }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(
+          responseDetail(data) ??
+          "Invalid or expired verification code. Please check your code and try again."
+        );
+        return;
+      }
+
+      const success = await refreshUser();
+      if (success) {
+        router.push("/home");
+      } else {
+        setError(
+          "Account activated successfully, but unable to load session. Please sign in to continue."
+        );
+      }
+    } catch {
+      setError("Unable to connect to the authentication service. Please check your connection.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 3 (Authenticator): Confirm 2FA code & get recovery codes
   const handleStep3Submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -338,6 +459,30 @@ function StudentActivationContent() {
     }
   };
 
+  const switchToAuthenticator = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      await beginTwoFactorSetup();
+      setMethod("authenticator");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Unable to start Authenticator setup. You can continue with Email OTP."
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchToEmailOtp = async () => {
+    setError(null);
+    setMethod("email_otp");
+    setStep(2);
+    await sendEmailOtp();
+  };
+
   return (
     <div className="min-h-screen bg-[var(--color-bg-canvas)] flex flex-col justify-center items-center p-4 sm:p-6 selection:bg-[var(--color-brand-orange)] selection:text-white">
       <div className="w-full max-w-xl relative z-10">
@@ -357,12 +502,12 @@ function StudentActivationContent() {
             Fellowship Account Activation
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            Complete the 4-step security onboarding to access your fellowship workspace.
+            Complete security onboarding to access your fellowship workspace.
           </p>
         </div>
 
         {/* Stepper */}
-        <StepIndicator currentStep={step} />
+        <StepIndicator currentStep={step} method={method} />
 
         {/* Card */}
         <div className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 sm:p-7 shadow-xl">
@@ -373,6 +518,7 @@ function StudentActivationContent() {
             </div>
           )}
 
+          {/* STEP 1: Set Password */}
           {step === 1 && (
             <form onSubmit={handleStep1Submit} className="space-y-4">
               {!invitationToken && (
@@ -427,7 +573,7 @@ function StudentActivationContent() {
                   </>
                 ) : (
                   <>
-                    <span>Activate Account</span>
+                    <span>Continue to Verification</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
@@ -435,7 +581,96 @@ function StudentActivationContent() {
             </form>
           )}
 
-          {step === 2 && (
+          {/* STEP 2: Email OTP Method */}
+          {step === 2 && method === "email_otp" && (
+            <div className="space-y-5">
+              <div className="text-center">
+                <div className="inline-flex p-3 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-[var(--color-brand-orange)] mb-3">
+                  <Mail className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-[var(--color-text-primary)]">
+                  Verify Your Email Address
+                </h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1 max-w-sm mx-auto">
+                  A 6-digit verification code was sent to{" "}
+                  <span className="font-semibold text-[var(--color-text-primary)]">
+                    {maskedEmail ?? "your registered email"}
+                  </span>
+                  .
+                </p>
+              </div>
+
+              <form onSubmit={handleVerifyEmailOtp} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 text-center">
+                    6-Digit Verification Code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    placeholder="123456"
+                    className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-center text-2xl font-mono tracking-widest text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-brand-orange)]"
+                  />
+                  <p className="text-[11px] text-[var(--color-text-muted)] text-center mt-1.5">
+                    Valid for 5 minutes. Code can only be used once.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-[var(--color-text-muted)]">Didn&apos;t receive a code?</span>
+                  <button
+                    type="button"
+                    disabled={cooldown > 0 || otpSending}
+                    onClick={() => void sendEmailOtp()}
+                    className="inline-flex items-center gap-1.5 font-semibold text-[var(--color-brand-orange)] hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${otpSending ? "animate-spin" : ""}`} />
+                    {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend Code"}
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || otpCode.length !== 6}
+                  className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Activating Account...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Verify & Enter Fellow Portal</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Switch to Authenticator App */}
+              <div className="pt-4 border-t border-[var(--color-border-default)] text-center">
+                <button
+                  type="button"
+                  onClick={() => void switchToAuthenticator()}
+                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Smartphone className="w-3.5 h-3.5" />
+                  <span>Prefer an app? Set up Authenticator App instead</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* STEP 2: Authenticator QR Code Setup */}
+          {step === 2 && method === "authenticator" && (
             <div className="space-y-5">
               <div className="text-center">
                 <div className="inline-flex p-3 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-[var(--color-brand-orange)] mb-3">
@@ -491,10 +726,23 @@ function StudentActivationContent() {
                 <span>I&apos;ve scanned the QR code</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              {/* Switch to Email OTP */}
+              <div className="pt-2 text-center">
+                <button
+                  type="button"
+                  onClick={() => void switchToEmailOtp()}
+                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Verify with email code instead</span>
+                </button>
+              </div>
             </div>
           )}
 
-          {step === 3 && (
+          {/* STEP 3: Authenticator Code Confirmation */}
+          {step === 3 && method === "authenticator" && (
             <form onSubmit={handleStep3Submit} className="space-y-5">
               <div className="text-center">
                 <div className="inline-flex p-3 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-[var(--color-brand-orange)] mb-3">
@@ -547,7 +795,8 @@ function StudentActivationContent() {
             </form>
           )}
 
-          {step === 4 && (
+          {/* STEP 4: Recovery Codes (Authenticator Only) */}
+          {step === 4 && method === "authenticator" && (
             <div className="space-y-5">
               <div className="text-center">
                 <div className="inline-flex p-3 rounded-2xl bg-emerald-500/10 text-emerald-500 mb-3">

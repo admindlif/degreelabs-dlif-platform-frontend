@@ -15,7 +15,8 @@ import {
   Loader2,
   Eye,
   EyeOff,
-  CheckCircle2,
+  RefreshCw,
+  Smartphone,
 } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api/config";
 import { useAuth } from "@/lib/auth-context";
@@ -32,46 +33,36 @@ function responseDetail(data: unknown): string | null {
   return null;
 }
 
-function requiresTwoFactor(data: unknown): boolean | null {
-  if (
-    typeof data === "object" &&
-    data !== null &&
-    "requires_2fa" in data &&
-    typeof (data as Record<string, unknown>).requires_2fa === "boolean"
-  ) {
-    return (data as Record<string, unknown>).requires_2fa as boolean;
-  }
-  return null;
-}
-
-function requiresMfaSetup(data: unknown): boolean {
-  return typeof data === "object" && data !== null &&
-    "requires_2fa_setup" in data &&
-    (data as Record<string, unknown>).requires_2fa_setup === true;
-}
-
-function getRecoveryCodes(data: unknown): string[] | null {
-  if (typeof data !== "object" || data === null || !("recovery_codes" in data)) return null;
-  const codes = (data as { recovery_codes: unknown }).recovery_codes;
-  return Array.isArray(codes) && codes.every((value) => typeof value === "string") ? codes : null;
+interface LoginResponseData {
+  requires_2fa?: boolean;
+  available_methods?: ("authenticator" | "email_otp")[];
+  default_method?: "authenticator" | "email_otp";
+  masked_email?: string;
 }
 
 export default function MentorLoginPage() {
   const router = useRouter();
   const { refreshUser } = useAuth();
 
-  // 1 = credentials, 2 = existing MFA, 3 = privileged MFA enrollment, 4 = recovery codes
-  const [stage, setStage] = React.useState<1 | 2 | 3 | 4>(1);
+  // Stage 1 = Credentials, Stage 2 = 2FA (Email OTP or Authenticator)
+  const [stage, setStage] = React.useState<1 | 2>(1);
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
 
   // Stage 2 state
-  const [code, setCode] = React.useState("");
+  const [verificationMethod, setVerificationMethod] = React.useState<"email_otp" | "authenticator">("authenticator");
+  const [availableMethods, setAvailableMethods] = React.useState<("authenticator" | "email_otp")[]>(["authenticator"]);
+  const [maskedEmail, setMaskedEmail] = React.useState<string | null>(null);
+
+  // Email OTP inputs & cooldown
+  const [otpCode, setOtpCode] = React.useState("");
+  const [cooldown, setCooldown] = React.useState(0);
+  const [otpSending, setOtpSending] = React.useState(false);
+
+  // Authenticator app inputs
+  const [totpCode, setTotpCode] = React.useState("");
   const [isRecoveryCode, setIsRecoveryCode] = React.useState(false);
-  const [qrCodeUrl, setQrCodeUrl] = React.useState<string | null>(null);
-  const [issuedRecoveryCodes, setIssuedRecoveryCodes] = React.useState<string[]>([]);
-  const [codesSaved, setCodesSaved] = React.useState(false);
 
   // Status
   const [loading, setLoading] = React.useState(false);
@@ -81,32 +72,52 @@ export default function MentorLoginPage() {
     return getApiBaseUrl().replace(/\/api\/v1\/?$/, "");
   }, []);
 
-  React.useEffect(() => () => {
-    if (qrCodeUrl) URL.revokeObjectURL(qrCodeUrl);
-  }, [qrCodeUrl]);
+  // Cooldown countdown timer
+  React.useEffect(() => {
+    if (cooldown <= 0) return;
+    const interval = setInterval(() => {
+      setCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldown]);
 
-  async function beginMfaEnrollment(base: string) {
-    const setup = await fetch(`${base}/api/v1/auth/2fa/setup`, {
-      method: "POST", credentials: "include", cache: "no-store",
-    });
-    const setupData: unknown = await setup.json().catch(() => null);
-    if (!setup.ok) throw new Error(responseDetail(setupData) ?? "Unable to initialize MFA enrollment.");
+  const sendEmailOtp = React.useCallback(async () => {
+    setOtpSending(true);
+    setError(null);
+    try {
+      const base = getBaseUrl();
+      const res = await fetch(`${base}/api/v1/auth/email-otp/send`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ purpose: "login" }),
+      });
 
-    const qr = await fetch(`${base}/api/v1/auth/2fa/qr`, {
-      method: "GET", credentials: "include", cache: "no-store",
-    });
-    if (!qr.ok) {
-      const qrData: unknown = await qr.json().catch(() => null);
-      throw new Error(responseDetail(qrData) ?? "Unable to load the authenticator QR code.");
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(responseDetail(data) ?? "Failed to send verification code. Please try again.");
+        return false;
+      }
+
+      if (
+        typeof data === "object" &&
+        data !== null &&
+        "masked_email" in data &&
+        typeof (data as Record<string, unknown>).masked_email === "string"
+      ) {
+        setMaskedEmail((data as Record<string, string>).masked_email);
+      }
+      setCooldown(60);
+      return true;
+    } catch {
+      setError("Unable to connect to the authentication service. Please check your connection.");
+      return false;
+    } finally {
+      setOtpSending(false);
     }
-    const objectUrl = URL.createObjectURL(await qr.blob());
-    setQrCodeUrl((previous) => {
-      if (previous) URL.revokeObjectURL(previous);
-      return objectUrl;
-    });
-    setCode("");
-    setStage(3);
-  }
+  }, [getBaseUrl]);
 
   async function handleStage1Submit(e: React.FormEvent) {
     e.preventDefault();
@@ -147,22 +158,38 @@ export default function MentorLoginPage() {
         return;
       }
 
-      if (requiresMfaSetup(data)) {
-        await beginMfaEnrollment(base);
-        return;
+      const loginData = (data ?? {}) as LoginResponseData;
+
+      if (loginData.requires_2fa === false) {
+        const ok = await refreshUser();
+        if (ok) {
+          router.push("/home");
+          return;
+        } else {
+          setError("Access denied: Your account does not have Mentor Portal access.");
+          return;
+        }
       }
 
-      const needsTwoFactor = requiresTwoFactor(data);
-      if (needsTwoFactor === true) {
+      if (loginData.requires_2fa === true) {
+        const methods = loginData.available_methods ?? ["authenticator"];
+        const chosenMethod =
+          loginData.default_method ??
+          (methods.includes("email_otp") ? "email_otp" : "authenticator");
+
+        setAvailableMethods(methods);
+        setVerificationMethod(chosenMethod);
+        if (loginData.masked_email) {
+          setMaskedEmail(loginData.masked_email);
+        }
         setStage(2);
-        return;
-      }
 
-      const ok = await refreshUser();
-      if (ok) {
-        router.push("/home");
+        // If chosen method is email_otp, send code immediately
+        if (chosenMethod === "email_otp") {
+          void sendEmailOtp();
+        }
       } else {
-        setError("Access denied: Your account does not have Mentor Portal access.");
+        setError("Unexpected response from authentication service.");
       }
     } catch {
       setError("Unable to connect to the authentication service. Please try again.");
@@ -171,55 +198,11 @@ export default function MentorLoginPage() {
     }
   }
 
-  async function handleEnrollmentSubmit(e: React.FormEvent) {
+  // Verify Email OTP
+  async function handleVerifyEmailOtp(e: React.FormEvent) {
     e.preventDefault();
-    if (!code.trim()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const base = getBaseUrl();
-      const res = await fetch(`${base}/api/v1/auth/2fa/confirm`, {
-        method: "POST", credentials: "include", cache: "no-store",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim() }),
-      });
-      const data: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(responseDetail(data) ?? "The authenticator code could not be confirmed.");
-        return;
-      }
-      const recoveryCodes = getRecoveryCodes(data);
-      if (!recoveryCodes?.length) {
-        setError("MFA was enabled, but recovery codes were not returned. Contact support before continuing.");
-        return;
-      }
-      setIssuedRecoveryCodes(recoveryCodes);
-      setCodesSaved(false);
-      setCode("");
-      setStage(4);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to confirm MFA enrollment.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function finishEnrollment() {
-    setLoading(true);
-    const ok = await refreshUser();
-    if (ok) {
-      setIssuedRecoveryCodes([]);
-      router.replace("/home");
-    } else {
-      setError("MFA succeeded, but Mentor Portal access could not be confirmed.");
-    }
-    setLoading(false);
-  }
-
-  async function handleStage2Submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!code.trim()) {
-      setError("Please enter your verification code.");
+    if (!otpCode.trim()) {
+      setError("Please enter your 6-digit verification code.");
       return;
     }
     setLoading(true);
@@ -227,12 +210,12 @@ export default function MentorLoginPage() {
 
     try {
       const base = getBaseUrl();
-      const res = await fetch(`${base}/api/v1/auth/2fa/verify`, {
+      const res = await fetch(`${base}/api/v1/auth/email-otp/verify`, {
         method: "POST",
         credentials: "include",
         cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: code.trim() }),
+        body: JSON.stringify({ code: otpCode.trim(), purpose: "login" }),
       });
 
       const data: unknown = await res.json().catch(() => null);
@@ -247,7 +230,63 @@ export default function MentorLoginPage() {
 
         if (challengeExpired) {
           setStage(1);
-          setCode("");
+          setOtpCode("");
+          setError("Your verification session has expired. Please sign in again.");
+          return;
+        }
+
+        setError(detail ?? "Invalid or expired verification code.");
+        return;
+      }
+
+      const ok = await refreshUser();
+      if (ok) {
+        router.push("/home");
+      } else {
+        setError("Authentication succeeded, but Mentor Portal access could not be confirmed.");
+        setStage(1);
+        setOtpCode("");
+      }
+    } catch {
+      setError("Unable to connect to the authentication service. Please check your connection.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Verify Authenticator TOTP or recovery code
+  async function handleStage2TotpSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!totpCode.trim()) {
+      setError("Please enter your verification code.");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+
+    try {
+      const base = getBaseUrl();
+      const res = await fetch(`${base}/api/v1/auth/2fa/verify`, {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: totpCode.trim() }),
+      });
+
+      const data: unknown = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        const detail = responseDetail(data);
+        const challengeExpired =
+          res.status === 401 &&
+          detail !== null &&
+          (detail.toLowerCase().includes("challenge") ||
+            detail.toLowerCase().includes("expired"));
+
+        if (challengeExpired) {
+          setStage(1);
+          setTotpCode("");
           setError("Your 2FA session has expired. Please sign in again.");
           return;
         }
@@ -262,7 +301,7 @@ export default function MentorLoginPage() {
       } else {
         setError("Authentication succeeded, but Mentor Portal access could not be confirmed.");
         setStage(1);
-        setCode("");
+        setTotpCode("");
       }
     } catch {
       setError("Unable to connect to the authentication service. Please try again shortly.");
@@ -298,15 +337,17 @@ export default function MentorLoginPage() {
             </span>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--color-text-primary)]">
-            {stage === 1 ? "Sign in to Mentor Portal" : stage === 2 ? "Two-Factor Verification" : stage === 3 ? "Secure Your Account" : "Save Recovery Codes"}
+            {stage === 1
+              ? "Sign in to Mentor Portal"
+              : verificationMethod === "email_otp"
+              ? "Check Your Email"
+              : "Two-Factor Verification"}
           </h1>
           <p className="text-sm text-[var(--color-text-muted)] mt-1">
             {stage === 1
               ? "Guide cohorts, review evidence, and collaborate on Working Boards."
-              : stage === 3
-              ? "MFA is mandatory for Program Manager accounts. Scan the QR code, then confirm a code."
-              : stage === 4
-              ? "These codes are shown once. Store them securely before continuing."
+              : verificationMethod === "email_otp"
+              ? `Enter the 6-digit code sent to ${maskedEmail ?? "your email"}`
               : isRecoveryCode
               ? "Enter one of your emergency recovery codes."
               : "Enter the 6-digit code from your authenticator app."}
@@ -399,14 +440,105 @@ export default function MentorLoginPage() {
                   </>
                 ) : (
                   <>
-                    <span>Continue to 2FA</span>
+                    <span>Continue to Verification</span>
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </button>
             </form>
-          ) : stage === 2 ? (
-            <form onSubmit={handleStage2Submit} className="space-y-4">
+          ) : verificationMethod === "email_otp" ? (
+            /* EMAIL OTP FORM */
+            <form onSubmit={handleVerifyEmailOtp} className="space-y-4">
+              <div className="flex items-center justify-center py-2">
+                <div className="w-14 h-14 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] flex items-center justify-center text-[var(--color-brand-orange)]">
+                  <Mail className="w-7 h-7" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 text-center">
+                  6-Digit Verification Code
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]*"
+                  maxLength={6}
+                  required
+                  autoFocus
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                  placeholder="123456"
+                  className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-center text-2xl font-mono tracking-widest text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-brand-orange)] transition-colors"
+                />
+                <p className="text-[11px] text-[var(--color-text-muted)] text-center mt-1.5">
+                  Valid for 5 minutes. Single-use only.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between text-xs pt-1">
+                <span className="text-[var(--color-text-muted)]">Didn&apos;t receive a code?</span>
+                <button
+                  type="button"
+                  disabled={cooldown > 0 || otpSending}
+                  onClick={() => void sendEmailOtp()}
+                  className="inline-flex items-center gap-1.5 font-semibold text-[var(--color-brand-orange)] hover:underline disabled:opacity-50 disabled:no-underline cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${otpSending ? "animate-spin" : ""}`} />
+                  {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend Code"}
+                </button>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otpCode.length !== 6}
+                className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Verifying...</span>
+                  </>
+                ) : (
+                  <span>Verify and Sign In</span>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between pt-2 text-xs">
+                {availableMethods.includes("authenticator") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVerificationMethod("authenticator");
+                      setError(null);
+                    }}
+                    className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] inline-flex items-center gap-1 underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>Use Authenticator App instead</span>
+                  </button>
+                ) : (
+                  <span />
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStage(1);
+                    setOtpCode("");
+                    setError(null);
+                  }}
+                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] flex items-center gap-1 transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  <span>Back</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* AUTHENTICATOR APP FORM */
+            <form onSubmit={handleStage2TotpSubmit} className="space-y-4">
               <div className="flex items-center justify-center py-2">
                 <div className="w-14 h-14 rounded-2xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] flex items-center justify-center text-[var(--color-brand-orange)]">
                   {isRecoveryCode ? <KeyRound className="w-7 h-7" /> : <Shield className="w-7 h-7" />}
@@ -422,8 +554,8 @@ export default function MentorLoginPage() {
                   required
                   autoFocus
                   maxLength={isRecoveryCode ? 16 : 8}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.trim())}
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.target.value.trim())}
                   placeholder={isRecoveryCode ? "e.g. 1a2b-3c4d" : "123456"}
                   className="w-full px-4 py-3 rounded-xl bg-[var(--color-bg-subtle)] border border-[var(--color-border-default)] text-center text-lg font-mono tracking-widest text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:border-[var(--color-brand-orange)] transition-colors"
                 />
@@ -431,7 +563,7 @@ export default function MentorLoginPage() {
 
               <button
                 type="submit"
-                disabled={loading || code.trim().length === 0}
+                disabled={loading || totpCode.trim().length === 0}
                 className="w-full py-3 px-4 rounded-xl bg-[var(--color-brand-orange)] hover:opacity-90 active:scale-[0.99] text-white font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 {loading ? (
@@ -444,57 +576,52 @@ export default function MentorLoginPage() {
                 )}
               </button>
 
-              <div className="flex items-center justify-between pt-2 text-xs">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsRecoveryCode(!isRecoveryCode);
-                    setCode("");
-                    setError(null);
-                  }}
-                  className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] underline underline-offset-2 transition-colors cursor-pointer"
-                >
-                  {isRecoveryCode ? "Use Authenticator app code" : "Use a backup recovery code"}
-                </button>
+              <div className="flex flex-col gap-2 pt-2 text-xs">
+                <div className="flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsRecoveryCode(!isRecoveryCode);
+                      setTotpCode("");
+                      setError(null);
+                    }}
+                    className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] underline underline-offset-2 transition-colors cursor-pointer"
+                  >
+                    {isRecoveryCode ? "Use Authenticator app code" : "Use a backup recovery code"}
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStage(1);
-                    setCode("");
-                    setError(null);
-                  }}
-                  className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <ArrowLeft className="w-3 h-3" />
-                  <span>Back</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStage(1);
+                      setTotpCode("");
+                      setError(null);
+                    }}
+                    className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3 h-3" />
+                    <span>Back</span>
+                  </button>
+                </div>
+
+                {availableMethods.includes("email_otp") && (
+                  <div className="pt-2 border-t border-[var(--color-border-default)] text-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerificationMethod("email_otp");
+                        setError(null);
+                        void sendEmailOtp();
+                      }}
+                      className="text-[var(--color-text-secondary)] hover:text-[var(--color-brand-orange)] inline-flex items-center gap-1 underline underline-offset-2 transition-colors cursor-pointer"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>Send code to email instead</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </form>
-          ) : stage === 3 ? (
-            <form onSubmit={handleEnrollmentSubmit} className="space-y-4">
-              <div className="mx-auto flex min-h-52 w-52 items-center justify-center rounded-xl border border-[var(--color-border-default)] bg-white p-3">
-                {qrCodeUrl ? <img src={qrCodeUrl} alt="Authenticator enrollment QR code" className="h-auto w-full" /> : <Loader2 className="h-8 w-8 animate-spin text-[var(--color-brand-orange)]" />}{/* eslint-disable-line @next/next/no-img-element -- authenticated blob URL cannot use the Next image optimizer */}
-              </div>
-              <div>
-                <label className="mb-1.5 block text-center text-xs font-semibold uppercase tracking-wider text-[var(--color-text-secondary)]">Authenticator Code</label>
-                <input type="text" required autoFocus autoComplete="one-time-code" maxLength={8} value={code} onChange={(e) => setCode(e.target.value.trim())} placeholder="123456" className="w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] px-4 py-3 text-center font-mono text-lg tracking-widest text-[var(--color-text-primary)] focus:border-[var(--color-brand-orange)] focus:outline-none" />
-              </div>
-              <button type="submit" disabled={loading || !code.trim()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-orange)] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm and Enable MFA"}
-              </button>
-              <p className="text-center text-xs text-[var(--color-text-muted)]">Do not share this QR code or authenticator code.</p>
-            </form>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-subtle)] p-4" aria-label="Recovery codes">
-                {issuedRecoveryCodes.map((recoveryCode) => <code key={recoveryCode} className="text-center text-sm text-[var(--color-text-primary)]">{recoveryCode}</code>)}
-              </div>
-              <label className="flex items-start gap-3 text-sm text-[var(--color-text-secondary)]"><input type="checkbox" checked={codesSaved} onChange={(e) => setCodesSaved(e.target.checked)} className="mt-1" /><span>I have stored these one-time recovery codes in a secure location.</span></label>
-              <button type="button" disabled={!codesSaved || loading} onClick={() => void finishEnrollment()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-brand-orange)] px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
-                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />} Continue to Mentor Portal
-              </button>
-            </div>
           )}
 
           <div className="mt-6 pt-5 border-t border-[var(--color-border-default)] text-center">
