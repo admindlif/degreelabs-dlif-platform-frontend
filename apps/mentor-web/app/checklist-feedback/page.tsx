@@ -30,6 +30,12 @@ import type {
   ChecklistFeedbackMessage,
 } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth-context";
+import {
+  mentorDraftKey,
+  saveExpiringDraft,
+  loadExpiringDraft,
+  removeDraft,
+} from "@/lib/auth/drafts";
 
 function ChecklistFeedbackContent() {
   const searchParams = useSearchParams();
@@ -49,6 +55,28 @@ function ChecklistFeedbackContent() {
   const [newMessage, setNewMessage] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const messagesEndRef = React.useRef<HTMLDivElement>(null);
+
+  const currentDraftKey = React.useMemo(() => {
+    if (!selectedItemId) return null;
+    return mentorDraftKey(user?.id, "feedback-msg", selectedTeamId, selectedItemId);
+  }, [user?.id, selectedTeamId, selectedItemId]);
+
+  React.useEffect(() => {
+    if (!currentDraftKey || typeof window === "undefined") return;
+    const saved = loadExpiringDraft<{ message: string }>(window.sessionStorage, currentDraftKey);
+    setNewMessage(saved?.message ?? "");
+  }, [currentDraftKey]);
+
+  const handleMessageChange = (text: string) => {
+    setNewMessage(text);
+    if (currentDraftKey && typeof window !== "undefined") {
+      if (text.trim()) {
+        saveExpiringDraft(window.sessionStorage, currentDraftKey, { message: text });
+      } else {
+        removeDraft(window.sessionStorage, currentDraftKey);
+      }
+    }
+  };
 
   // Load teams then items
   React.useEffect(() => {
@@ -131,6 +159,9 @@ function ChecklistFeedbackContent() {
         currentItem.fellow_id,
         newMessage.trim()
       );
+      if (currentDraftKey && typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, currentDraftKey);
+      }
       setMessages((prev) => [...prev, posted]);
       setNewMessage("");
     } catch (err: unknown) {
@@ -379,7 +410,7 @@ function ChecklistFeedbackContent() {
               <input
                 type="text"
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={(e) => handleMessageChange(e.target.value)}
                 placeholder="Send a message to the fellow..."
                 disabled={sending || !selectedItemId}
                 className="flex-1 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand-orange)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-orange)] disabled:opacity-60"

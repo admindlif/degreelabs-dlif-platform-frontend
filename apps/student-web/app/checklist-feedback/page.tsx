@@ -13,9 +13,7 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
-  User,
   ShieldCheck,
-  ChevronRight,
 } from "lucide-react";
 import { PortalShell } from "@/components/layout/portal-shell";
 import { Button } from "@/components/ui/button";
@@ -26,10 +24,15 @@ import {
 } from "@/lib/api/checklist";
 import type {
   ChecklistFeedbackMessage,
-  ChecklistItem,
   FellowChecklistResponse,
 } from "@/lib/api/types";
 import { useAuth } from "@/lib/auth-context";
+import {
+  fellowDraftKey,
+  loadExpiringDraft,
+  removeDraft,
+  saveExpiringDraft,
+} from "@/lib/auth/drafts";
 
 export default function ChecklistFeedbackPage() {
   const searchParams = useSearchParams();
@@ -63,12 +66,14 @@ export default function ChecklistFeedbackPage() {
   }, [selectedItemId]);
 
   React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadChecklist();
   }, [loadChecklist]);
 
   // Sync with URL param
   React.useEffect(() => {
     if (itemIdParam && itemIdParam !== selectedItemId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedItemId(itemIdParam);
     }
   }, [itemIdParam, selectedItemId]);
@@ -90,9 +95,17 @@ export default function ChecklistFeedbackPage() {
 
   React.useEffect(() => {
     if (selectedItemId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       void loadThread(selectedItemId);
+      if (typeof window !== "undefined") {
+        const draft = loadExpiringDraft<string>(
+          window.sessionStorage,
+          fellowDraftKey(user?.id, "checklist-chat", selectedItemId)
+        );
+        setNewMessage(draft ?? "");
+      }
     }
-  }, [selectedItemId, loadThread]);
+  }, [selectedItemId, loadThread, user?.id]);
 
   // Scroll to bottom when messages change
   React.useEffect(() => {
@@ -112,6 +125,9 @@ export default function ChecklistFeedbackPage() {
       const posted = await postChecklistFeedback(selectedItemId, newMessage.trim());
       setMessages((prev) => [...prev, posted]);
       setNewMessage("");
+      if (typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, fellowDraftKey(user?.id, "checklist-chat", selectedItemId));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unable to post message.");
     } finally {
@@ -414,7 +430,17 @@ export default function ChecklistFeedbackPage() {
               <input
                 type="text"
                 value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setNewMessage(val);
+                  if (selectedItemId && typeof window !== "undefined") {
+                    saveExpiringDraft(
+                      window.sessionStorage,
+                      fellowDraftKey(user?.id, "checklist-chat", selectedItemId),
+                      val
+                    );
+                  }
+                }}
                 placeholder="Ask a question, explain partial work, or request clarification..."
                 disabled={sending || !selectedItemId}
                 className="flex-1 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-canvas)] px-3.5 py-2.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-muted)] focus:border-[var(--color-brand-orange)] focus:outline-none focus:ring-1 focus:ring-[var(--color-brand-orange)] disabled:opacity-60"

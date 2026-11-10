@@ -39,6 +39,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getErrorMessage } from "@/lib/api/client";
+import { useAuth } from "@/lib/auth-context";
+import {
+  adminDraftKey,
+  loadExpiringDraft,
+  removeDraft,
+  saveExpiringDraft,
+} from "@/lib/auth/drafts";
 
 // Canonical DLIF Fellow Handbook (Page 9) rubric
 const HANDBOOK_DIMENSIONS = [
@@ -88,6 +95,7 @@ export function DiscoverGateReviewsTab({
   cohorts,
   teams,
 }: DiscoverGateReviewsTabProps) {
+  const { user } = useAuth();
   const [gateItems, setGateItems] = React.useState<AdminDiscoverGateItem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -109,6 +117,22 @@ export function DiscoverGateReviewsTab({
 
   // Confirmation Dialog for Unlock VALIDATE
   const [showUnlockConfirm, setShowUnlockConfirm] = React.useState<boolean>(false);
+
+  const reviewDraftKey = React.useMemo(
+    () => selectedGate
+      ? adminDraftKey(user?.id, "discover-gate-review", selectedGate.team_id)
+      : null,
+    [selectedGate, user?.id]
+  );
+
+  React.useEffect(() => {
+    if (!reviewDraftKey || !reviewModalOpen) return;
+    saveExpiringDraft(window.sessionStorage, reviewDraftKey, { actionNotes });
+  }, [actionNotes, reviewDraftKey, reviewModalOpen]);
+
+  const clearReviewDraft = React.useCallback(() => {
+    if (reviewDraftKey) removeDraft(window.sessionStorage, reviewDraftKey);
+  }, [reviewDraftKey]);
 
   // Load Data
   const loadData = React.useCallback(async (isSilent = false) => {
@@ -262,8 +286,10 @@ export function DiscoverGateReviewsTab({
 
   // Handlers
   const handleOpenReview = (item: AdminDiscoverGateItem) => {
+    const key = adminDraftKey(user?.id, "discover-gate-review", item.team_id);
+    const draft = loadExpiringDraft<{ actionNotes: string }>(window.sessionStorage, key);
     setSelectedGate(item);
-    setActionNotes("");
+    setActionNotes(draft?.actionNotes ?? "");
     setModalSuccess(null);
     setModalError(null);
     setShowUnlockConfirm(false);
@@ -278,6 +304,8 @@ export function DiscoverGateReviewsTab({
 
     try {
       await recordAdminCompanyDecision(selectedGate.team_id, decision, actionNotes);
+      clearReviewDraft();
+      setActionNotes("");
       setModalSuccess(
         `Company decision (${decision === "shortlisted" ? "Shortlisted" : "Rejected"}) recorded successfully.`
       );
@@ -310,6 +338,8 @@ export function DiscoverGateReviewsTab({
 
     try {
       await requestAdminGateRevision(selectedGate.team_id, actionNotes.trim());
+      clearReviewDraft();
+      setActionNotes("");
       setModalSuccess("Assessment revision requested from Mentor.");
       setSelectedGate((prev) =>
         prev ? { ...prev, assessment_status: "revision_requested" } : null
@@ -330,6 +360,8 @@ export function DiscoverGateReviewsTab({
 
     try {
       await unlockAdminValidate(selectedGate.team_id, actionNotes.trim());
+      clearReviewDraft();
+      setActionNotes("");
       setModalSuccess(
         `Phase 2 – VALIDATE unlocked for Team ${selectedGate.team_name}! Congratulations emails have been queued for all eligible team Fellows.`
       );

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev --webpack --port 3003",
     "build": "next build --webpack",
+    "test": "node --test lib/auth/__tests__/*.test.ts",
     "start": "next start --port 3003",
     "lint": "eslint",
     "dev:vinext": "vite dev --port 3004",

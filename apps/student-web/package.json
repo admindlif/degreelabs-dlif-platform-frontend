@@ -11,7 +11,7 @@
     "build:vinext": "vite build",
     "start:vinext": "vite preview",
     "deploy:vinext": "vinext-cloudflare deploy",
-    "test": "node --test components/recording/__tests__/recording.test.ts"
+    "test": "node --test components/recording/__tests__/recording.test.ts lib/auth/__tests__/*.test.ts"
   },
   "dependencies": {
     "@cloudflare/workers-response-store": "^1.0.1",

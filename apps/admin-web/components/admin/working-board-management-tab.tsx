@@ -30,6 +30,19 @@ import {
   updateAdminWorkingBoard,
   patchAdminWorkingBoardPublication,
 } from "@/lib/api/admin";
+import { useAuth } from "@/lib/auth-context";
+import {
+  adminDraftKey,
+  loadExpiringDraft,
+  removeDraft,
+  saveExpiringDraft,
+} from "@/lib/auth/drafts";
+
+interface WorkingBoardDraft {
+  title: string;
+  workingBoardUrl: string;
+  instructions: string;
+}
 
 interface WorkingBoardManagementTabProps {
   cohorts: AdminCohort[];
@@ -44,6 +57,7 @@ export function WorkingBoardManagementTab({
   sessions,
   teams,
 }: WorkingBoardManagementTabProps) {
+  const { user } = useAuth();
   const [workingBoards, setWorkingBoards] = React.useState<AdminWorkingBoardDetail[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -68,6 +82,23 @@ export function WorkingBoardManagementTab({
   const [instructions, setInstructions] = React.useState<string>("");
   const [saving, setSaving] = React.useState(false);
   const [formError, setFormError] = React.useState<string | null>(null);
+  const hydratedDraftKey = React.useRef<string | null>(null);
+
+  const workingBoardDraftKey = React.useMemo(
+    () => selectedSessionId && selectedTeamId
+      ? adminDraftKey(user?.id, "working-board", selectedSessionId, selectedTeamId)
+      : null,
+    [selectedSessionId, selectedTeamId, user?.id]
+  );
+
+  React.useEffect(() => {
+    if (!workingBoardDraftKey || hydratedDraftKey.current !== workingBoardDraftKey) return;
+    saveExpiringDraft<WorkingBoardDraft>(window.sessionStorage, workingBoardDraftKey, {
+      title,
+      workingBoardUrl,
+      instructions,
+    });
+  }, [instructions, title, workingBoardDraftKey, workingBoardUrl]);
 
   // Load working boards
   const loadBoards = React.useCallback(async () => {
@@ -117,6 +148,7 @@ export function WorkingBoardManagementTab({
   // When session and team are chosen, check if a working board already exists for that pair
   React.useEffect(() => {
     if (!selectedSessionId || !selectedTeamId) {
+      hydratedDraftKey.current = null;
       if (!editingBoardId) {
         setTitle("Working Board");
         setWorkingBoardUrl("");
@@ -128,21 +160,28 @@ export function WorkingBoardManagementTab({
     const existing = workingBoards.find(
       (b) => b.session_id === selectedSessionId && b.team_id === selectedTeamId
     );
+    const draftKey = adminDraftKey(
+      user?.id,
+      "working-board",
+      selectedSessionId,
+      selectedTeamId
+    );
+    const draft = loadExpiringDraft<WorkingBoardDraft>(window.sessionStorage, draftKey);
+    hydratedDraftKey.current = draftKey;
 
     if (existing) {
       setEditingBoardId(existing.id);
-      setTitle(existing.title || "Working Board");
-      setWorkingBoardUrl(existing.working_board_url || "");
-      setInstructions(existing.instructions || "");
+      setTitle(draft?.title ?? existing.title ?? "Working Board");
+      setWorkingBoardUrl(draft?.workingBoardUrl ?? existing.working_board_url ?? "");
+      setInstructions(draft?.instructions ?? existing.instructions ?? "");
       setFormError(null);
-    } else if (editingBoardId) {
-      // Switched away from an existing one
+    } else {
       setEditingBoardId(null);
-      setTitle("Working Board");
-      setWorkingBoardUrl("");
-      setInstructions("");
+      setTitle(draft?.title ?? "Working Board");
+      setWorkingBoardUrl(draft?.workingBoardUrl ?? "");
+      setInstructions(draft?.instructions ?? "");
     }
-  }, [selectedSessionId, selectedTeamId, workingBoards, editingBoardId]);
+  }, [selectedSessionId, selectedTeamId, workingBoards, user?.id]);
 
   // Handle URL Validation
   function validateUrl(url: string): string | null {
@@ -221,6 +260,9 @@ export function WorkingBoardManagementTab({
           `Working Board created and ${publish ? "published" : "saved as draft"} successfully.`
         );
       }
+      if (workingBoardDraftKey) {
+        removeDraft(window.sessionStorage, workingBoardDraftKey);
+      }
       await loadBoards();
     } catch (err: unknown) {
       console.error("Failed to save working board:", err);
@@ -260,6 +302,9 @@ export function WorkingBoardManagementTab({
   }
 
   function handleResetForm() {
+    if (workingBoardDraftKey) {
+      removeDraft(window.sessionStorage, workingBoardDraftKey);
+    }
     setEditingBoardId(null);
     setSelectedCohortId("");
     setSelectedWeekId("");

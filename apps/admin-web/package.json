@@ -9,6 +9,7 @@
     "build:vinext": "vite build",
     "start": "next start --port 3002",
     "lint": "eslint",
+    "test": "node --test lib/auth/__tests__/*.test.ts",
     "deploy:vinext": "vinext-cloudflare deploy"
   },
   "dependencies": {

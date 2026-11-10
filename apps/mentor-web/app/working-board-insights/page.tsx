@@ -36,6 +36,13 @@ import type {
   MentorWorkingBoardSummary,
   MentorWorkingBoardInsightsDetail,
 } from "@/lib/api/types";
+import { useAuth } from "@/lib/auth-context";
+import {
+  mentorDraftKey,
+  saveExpiringDraft,
+  loadExpiringDraft,
+  removeDraft,
+} from "@/lib/auth/drafts";
 
 export default function MentorWorkingBoardInsightsPage() {
   const searchParams = useSearchParams();
@@ -43,6 +50,7 @@ export default function MentorWorkingBoardInsightsPage() {
   const teamParam = searchParams.get("teamId");
   const sessionParam = searchParams.get("sessionId");
   const boardParam = searchParams.get("boardId");
+  const { user } = useAuth();
 
   const [teams, setTeams] = React.useState<MentorTeamSummary[]>([]);
   const [selectedTeamId, setSelectedTeamId] = React.useState<string>(teamParam ?? "");
@@ -70,6 +78,22 @@ export default function MentorWorkingBoardInsightsPage() {
   } | null>(null);
 
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+
+  const insightsDraftKey = React.useMemo(() => {
+    if (!currentBoard) return null;
+    return mentorDraftKey(user?.id, "insights", currentBoard.id);
+  }, [user?.id, currentBoard]);
+
+  const handleInsightsTextChange = (text: string) => {
+    setInsightsText(text);
+    if (insightsDraftKey && typeof window !== "undefined") {
+      if (text.trim()) {
+        saveExpiringDraft(window.sessionStorage, insightsDraftKey, { text });
+      } else {
+        removeDraft(window.sessionStorage, insightsDraftKey);
+      }
+    }
+  };
 
   // 1. Load mentor's teams
   React.useEffect(() => {
@@ -164,29 +188,39 @@ export default function MentorWorkingBoardInsightsPage() {
   }, [workingBoards, selectedTeamId, selectedSessionId, boardParam]);
 
   // 5. Load insights for current board
-  const loadBoardInsights = React.useCallback(async (boardId: string) => {
-    setLoadingInsights(true);
-    setStatusMessage(null);
-    try {
-      const data = await getMentorWorkingBoardInsights(boardId);
-      setInsights(data);
-      if (data) {
-        setInsightsText(data.insights_text);
-        setIsEditing(false);
-      } else {
-        setInsightsText("");
-        setIsEditing(true);
+  const loadBoardInsights = React.useCallback(
+    async (boardId: string) => {
+      setLoadingInsights(true);
+      setStatusMessage(null);
+      try {
+        const data = await getMentorWorkingBoardInsights(boardId);
+        setInsights(data);
+        if (data) {
+          setInsightsText(data.insights_text);
+          setIsEditing(false);
+        } else {
+          // No server insights yet — restore from sessionStorage draft if present
+          const draftKey = mentorDraftKey(user?.id, "insights", boardId);
+          if (typeof window !== "undefined") {
+            const saved = loadExpiringDraft<{ text: string }>(window.sessionStorage, draftKey);
+            setInsightsText(saved?.text ?? "");
+          } else {
+            setInsightsText("");
+          }
+          setIsEditing(true);
+        }
+      } catch (err: unknown) {
+        console.error("Failed to load Mentor Insights:", err);
+        setStatusMessage({
+          type: "error",
+          text: "Failed to load existing insights for this working board.",
+        });
+      } finally {
+        setLoadingInsights(false);
       }
-    } catch (err: unknown) {
-      console.error("Failed to load Mentor Insights:", err);
-      setStatusMessage({
-        type: "error",
-        text: "Failed to load existing insights for this working board.",
-      });
-    } finally {
-      setLoadingInsights(false);
-    }
-  }, []);
+    },
+    [user?.id],
+  );
 
   React.useEffect(() => {
     if (currentBoard && currentBoard.is_published) {
@@ -216,10 +250,8 @@ export default function MentorWorkingBoardInsightsPage() {
   // Insert fellow name into textarea at cursor or end
   function insertFellowName(name: string) {
     const snippet = `\n${name}:\n`;
-    setInsightsText((prev) => {
-      if (!prev.trim()) return `${name}:\n`;
-      return `${prev.trimEnd()}${snippet}`;
-    });
+    const next = insightsText.trim() ? `${insightsText.trimEnd()}${snippet}` : `${name}:\n`;
+    handleInsightsTextChange(next);
     if (!isEditing) setIsEditing(true);
     setTimeout(() => {
       if (textareaRef.current) {
@@ -253,6 +285,10 @@ export default function MentorWorkingBoardInsightsPage() {
         type: "success",
         text: "Draft saved successfully. Draft insights are not visible to fellows until published.",
       });
+      // Clear sessionStorage draft — content is now persisted on the server
+      if (insightsDraftKey && typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, insightsDraftKey);
+      }
       setIsEditing(false);
     } catch (err: unknown) {
       console.error("Failed to save draft insights:", err);
@@ -291,6 +327,10 @@ export default function MentorWorkingBoardInsightsPage() {
         type: "success",
         text: "Mentor Insights published successfully! Fellows can now view these observations.",
       });
+      // Clear sessionStorage draft — content is now published on the server
+      if (insightsDraftKey && typeof window !== "undefined") {
+        removeDraft(window.sessionStorage, insightsDraftKey);
+      }
       setIsEditing(false);
     } catch (err: unknown) {
       console.error("Failed to publish insights:", err);
@@ -550,7 +590,7 @@ export default function MentorWorkingBoardInsightsPage() {
                     ref={textareaRef}
                     rows={12}
                     value={insightsText}
-                    onChange={(e) => setInsightsText(e.target.value)}
+                    onChange={(e) => handleInsightsTextChange(e.target.value)}
                     placeholder="Enter your observations on the team's Working Board. Mention each fellow by name wherever specific feedback applies."
                     className="w-full rounded-xl border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4 text-sm text-[var(--color-navy)] leading-relaxed outline-none focus:border-[var(--color-brand-blue)] resize-y"
                   />
